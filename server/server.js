@@ -101,6 +101,7 @@ app.post('/save-pdf', async (req, res) => {
 
     const fileStream = fs.createReadStream(outputPath);
     const uploaded = await drive.files.create({
+      supportsAllDrives: true,
       requestBody: {
         name: filename,
         mimeType: 'application/pdf',
@@ -115,6 +116,7 @@ app.post('/save-pdf', async (req, res) => {
 
     // Step 3: Make file readable by anyone with link
     await drive.permissions.create({
+      supportsAllDrives: true,
       fileId: uploaded.data.id,
       requestBody: {
         role: 'reader',
