@@ -1,0 +1,194 @@
+[
+  {
+    "condition": "Total Knee Replacement",
+    "overview": "Knee joint replaced with an implant due to severe arthritis/injury.",
+    "duration": "Full recovery often 3–6 months (strength/function continue to improve to 6months).",
+    "physio_importance": "Reduce pain, regain knee ROM & strength, restore walking and daily activities.",
+    "modalities": "No modalities (exercise focused )",
+    "package": "Senior Citizen"
+  },
+  {
+    "condition": "Hip Replacement",
+    "overview": "Damaged hip joint replaced (arthritis / fracture).",
+    "duration": "Full recovery 3–6 months (functional gains earlier, strength continues to improve).",
+    "physio_importance": "Restore walking, balance, strength; prevent limp and complications.",
+    "modalities": "No modalities (exercise focused)",
+    "package": "Senior Citizen"
+  },
+  {
+    "condition": "ACL reconstruction / Knee ligament injury",
+    "overview": "Tear of knee stabilizing ligament; often repaired surgically.",
+    "duration": "6-9 months to return to sport; daily activities improve earlier (1–3 months).",
+    "physio_importance": "Restore stability, strength, neuromuscular control to avoid re-injury.",
+    "modalities": "Strengthening, balance, functional training; modalities for pain (ULTRASOUND/TENS - IF IT IS NOT OPERATATED)",
+    "package": "Senior Citizen/ Orthopedic"
+  },
+  {
+    "condition": "Rotator cuff tear (post-repair)",
+    "overview": "Tear of shoulder tendons; surgery for larger tears.",
+    "duration": "3-6 months typical for recovery after repair.",
+    "physio_importance": "Protect repair, restore ROM, then rebuild shoulder strength and overhead function.",
+    "modalities": "Early: protection/pain control (ice); later: therapeutic exercise; manual therapy, Modalities (MS - IF IT IS NOT OPERATED)",
+    "package": "Senior Citizen/ Orthopedic"
+  },
+  {
+    "condition": "Shoulder surgery (other)",
+    "overview": "Any shoulder surgery to fix rotator cuff, labrum, etc.",
+    "duration": "3–6 months for most to return to full function (varies).",
+    "physio_importance": "Restore motion, strength, scapular control, reduce pain.",
+    "modalities": "Exercise, manual therapy, pain control (ice/TENS)",
+    "package": "Senior Citizen"
+  },
+  {
+    "condition": "Fracture (after cast/surgery)",
+    "overview": "Broken bone — rehab starts after bone is stable/healed.",
+    "duration": "Upper limb ~6–8 weeks; lower limb ~8–12 weeks (complex longer).",
+    "physio_importance": "Restore joint ROM, strength, return to function and safe loading.",
+    "modalities": "ROM, progressive strengthening, gait retraining",
+    "package": "Senior Citizen/ Orthopedic"
+  },
+  {
+    "condition": "Spinal surgery",
+    "overview": "Operations on lumbar/cervical spine (discectomy, fusion etc.).",
+    "duration": "4–6 months common; complex cases may need longer and staged rehab.",
+    "physio_importance": "Rebuild core strength, mobility, protect spine, restore function.",
+    "modalities": "Exercise, neural mobilization, graded activity; modalities for pain as needed",
+    "package": "Senior Citizen/ Orthopedic"
+  },
+  {
+    "condition": "Plantar fasciitis",
+    "overview": "Heel pain from overuse/strain of plantar fascia.",
+    "duration": "4–8 weeks typical with good treatment; chronic can take months.",
+    "physio_importance": "Stretching, load management, strengthening and footwear advice to stop recurrence.",
+    "modalities": "Taping, orthotics, night splints, shockwave (for chronic), exercise",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Tendinopathy (e.g., achilles, tennis elbow)",
+    "overview": "Tendon pain from overload/degeneration.",
+    "duration": "6–12 weeks for many; chronic cases may take 3–6 months.",
+    "physio_importance": "Gradual load-progression, eccentric loading, restore tendon tolerance.",
+    "modalities": "Exercise therapy (high-load eccentrics), shockwave for chronic, taping",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Low back pain",
+    "overview": "Pain in lumbar area; acute to chronic forms.",
+    "duration": "Acute: 2–4 weeks improvement; subacute/chronic: 6–12+ weeks or more.",
+    "physio_importance": "Reduce pain, improve movement control, strengthen core, prevent recurrence.",
+    "modalities": "Exercise, education, manual therapy, TENS/heat for symptom relief",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Osteoarthritis pain (knee/hip)",
+    "overview": "Wear & tear of joint cartilage causing pain/stiffness.",
+    "duration": "8–12 weeks supervised physio for meaningful improvement; maintenance ongoing.",
+    "physio_importance": "Strengthen muscles around joint, improve mobility and reduce pain long-term.",
+    "modalities": "Exercise, education, walking program; TENS/heat for pain relief; orthotics",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Neck pain",
+    "overview": "Pain in cervical spine; acute or chronic.",
+    "duration": "Acute: 2–4 weeks; chronic: 6–12+ weeks depending on cause.",
+    "physio_importance": "Restore motion, reduce pain, strengthen postural muscles, ergonomic education.",
+    "modalities": "Exercise, manual therapy, heat/TENS for pain relief",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Frozen shoulder (adhesive capsulitis)",
+    "overview": "Progressive shoulder stiffness & pain.",
+    "duration": "Total course often 9 months–2 years; active physio over many months (≈3–12+ months).",
+    "physio_importance": "Relieve pain, maintain motion, gradual stretching & mobilization to thaw joint.",
+    "modalities": "Manual therapy/joint mobilization, exercises; modalities for pain control",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Parkinson’s disease",
+    "overview": "Progressive neurological condition causing movement slowness & balance issues.",
+    "duration": "Rehab is ongoing; blocks of intensive physio (e.g. 8–12 weeks) help function; lifelong maintenance.",
+    "physio_importance": "Improve gait, balance, transfers, reduce fall risk and maintain independence.",
+    "modalities": "Gait training, balance exercises, cueing, task training; modalities rarely primary",
+    "package": "Senior Citizen/ Neurologic Package"
+  },
+  {
+    "condition": "Postnatal physiotherapy",
+    "overview": "Rehab after childbirth (pelvic floor, core, posture).",
+    "duration": "4–12 weeks initial program; may continue longer for pelvic floor issues.",
+    "physio_importance": "Restore pelvic floor function, core strength, posture, and reduce pain.",
+    "modalities": "Pelvic floor training, core exercises; biofeedback as needed",
+    "package": "Senior Citizen"
+  },
+  {
+    "condition": "Prenatal physiotherapy",
+    "overview": "Antenatal care for pain, posture and pelvic floor.",
+    "duration": "Short programs during pregnancy (weeks-months) as needed; symptom-based.",
+    "physio_importance": "Reduce back/pelvic pain, teach safe exercise and prepare pelvic floor.",
+    "modalities": "Exercise, posture advice, manual therapy, education",
+    "package": "Senior Citizen"
+  },
+  {
+    "condition": "Stroke rehabilitation",
+    "overview": "Recovery after brain stroke affecting movement/speech.",
+    "duration": "Major gains 3–6 months; rehab often continues 6–12+ months and sometimes lifelong.",
+    "physio_importance": "Restore mobility, strength, balance, ADLs; neuro-retraining is key.",
+    "modalities": "Neuro-rehab exercises, gait training, task-specific training, electrical stimulation",
+    "package": "Neurological Package"
+  },
+  {
+    "condition": "Muscular dystrophy",
+    "overview": "Progressive muscle weakness disorders (chronic).",
+    "duration": "Lifelong physiotherapy to maintain function; no cure.",
+    "physio_importance": "Maintain mobility, slow loss of function, prevent contractures.",
+    "modalities": "Stretching, strengthening (as tolerated), positioning",
+    "package": "Neurological Package"
+  },
+  {
+    "condition": "Multiple sclerosis",
+    "overview": "Neurological disease with relapses & progression.",
+    "duration": "Rehab ongoing; short courses (e.g. 6–12 weeks) improve function; maintenance long-term.",
+    "physio_importance": "Improve mobility, reduce fatigue, maintain strength, adapt activities.",
+    "modalities": "Exercise programs, balance training, energy-conservation strategies",
+    "package": "Neurological Package"
+  },
+  {
+    "condition": "Erb’s Palsy (brachial plexus birth injury)",
+    "overview": "Nerve injury at birth causing arm weakness.",
+    "duration": "Weeks to months for mild cases; severe may need surgery and longer rehab (months–years).",
+    "physio_importance": "Improve movement, prevent contractures, stimulate muscle activation.",
+    "modalities": "Neuro-developmental therapy, passive/active exercises",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Carpal tunnel syndrome",
+    "overview": "Median nerve compression at wrist causing hand numbness/weakness.",
+    "duration": "Weeks to months with conservative care; post-op rehab 4–8 weeks.",
+    "physio_importance": "Reduce nerve irritation, improve hand function, strengthen/wrist mechanics.",
+    "modalities": "Nerve gliding, exercises, ice; post-op scar & nerve mobilization",
+    "package": "Orthopedic Package"
+  },
+  {
+    "condition": "Cerebral palsy",
+    "overview": "Non-progressive brain injury causing lifelong motor impairment.",
+    "duration": "Lifelong physiotherapy with periodic intensive blocks depending on goals.",
+    "physio_importance": "Improve mobility, prevent contractures, train function and adaptive strategies.",
+    "modalities": "Stretching, strengthening, gait training, positioning",
+    "package": "Neurological Package"
+  },
+  {
+    "condition": "Bell’s palsy",
+    "overview": "Facial nerve weakness causing drooping of one side of face.",
+    "duration": "Many recover in weeks–months; majority within 3–6 months.",
+    "physio_importance": "Facial retraining, massage, neuromuscular facilitation to restore symmetry.",
+    "modalities": "Facial exercises, neuromuscular re-education; electrical stimulation sometimes used",
+    "package": "Neurological Package"
+  },
+  {
+    "condition": "Ankle sprain",
+    "overview": "Ligament stretch/tear around ankle from twisting injury.",
+    "duration": "Mild: 1–3 weeks; moderate: 4–6 weeks; severe: >6–12 weeks.",
+    "physio_importance": "Reduce pain/swelling, restore ROM, strength, proprioception to avoid re-injury.",
+    "modalities": "RICE initially, balance training, strengthening; tape as needed",
+    "package": "Orthopedic Package"
+  }
+]

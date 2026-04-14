@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Care Plan Generator — Lifetime Health</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F8FAFC;color:#1E293B;min-height:100vh}
+  input,select,textarea,button{font-family:inherit;font-size:15px}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:#E2E8F0;outline:none;width:100%}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:11px;background:#2563EB;cursor:pointer;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+  select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748B' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .spin{animation:spin 0.9s linear infinite}
+  .fade-up{animation:fadeUp 0.25s ease forwards}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#2563EB !important;box-shadow:0 0 0 3px rgba(37,99,235,0.1)}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────
+   CONFIG
+   Change API_ENDPOINT to your deployed server URL in production.
+   In development (npm run dev) keep it as '/generate-plan'.
+   ───────────────────────────────────────────────────────────────── */
+const API_ENDPOINT = '/generate-plan';
+// const API_ENDPOINT = 'https://your-app.railway.app/generate-plan';
+// const API_ENDPOINT = 'https://your-worker.workers.dev';
+
+/* ─────────────────────────────────────────────────────────────────
+   PROTOCOL DATA — all 24 Lifetime Health conditions
+   ───────────────────────────────────────────────────────────────── */
+const PROTOCOLS = [
+  {condition:'Total Knee Replacement',overview:'Knee joint replaced with implant due to severe arthritis/injury.',duration:'Full recovery 3–6 months.',physio_importance:'Reduce pain, regain knee ROM and strength, restore walking.',modalities:'Exercise focused (no modalities)',package:'Senior Citizen'},
+  {condition:'Hip Replacement',overview:'Damaged hip joint replaced (arthritis/fracture).',duration:'Full recovery 3–6 months.',physio_importance:'Restore walking, balance, strength; prevent limp.',modalities:'Exercise focused (no modalities)',package:'Senior Citizen'},
+  {condition:'ACL Reconstruction / Knee Ligament Injury',overview:'Tear of knee stabilising ligament; often repaired surgically.',duration:'6–9 months to sport; daily activities 1–3 months.',physio_importance:'Restore stability, strength, neuromuscular control.',modalities:'Strengthening, balance, functional training; ULTRASOUND/TENS if not operated',package:'Orthopedic Package'},
+  {condition:'Rotator Cuff Tear (post-repair)',overview:'Tear of shoulder tendons; surgery for larger tears.',duration:'3–6 months typical recovery.',physio_importance:'Protect repair, restore ROM, rebuild shoulder strength.',modalities:'Early: ice/protection; later: manual therapy, MS if not operated',package:'Orthopedic Package'},
+  {condition:'Shoulder Surgery (other)',overview:'Any shoulder surgery (rotator cuff, labrum etc).',duration:'3–6 months for full function.',physio_importance:'Restore motion, strength, scapular control.',modalities:'Exercise, manual therapy, ice/TENS',package:'Senior Citizen'},
+  {condition:'Fracture (after cast/surgery)',overview:'Broken bone — rehab after bone is stable/healed.',duration:'Upper limb 6–8 weeks; lower limb 8–12 weeks.',physio_importance:'Restore ROM, strength, return to function.',modalities:'ROM, progressive strengthening, gait retraining',package:'Orthopedic Package'},
+  {condition:'Spinal Surgery',overview:'Operations on lumbar/cervical spine (discectomy, fusion etc).',duration:'4–6 months; complex cases longer.',physio_importance:'Rebuild core strength, mobility, protect spine.',modalities:'Exercise, neural mobilisation, graded activity; modalities for pain',package:'Orthopedic Package'},
+  {condition:'Plantar Fasciitis',overview:'Heel pain from overuse/strain of plantar fascia.',duration:'4–8 weeks; chronic can take months.',physio_importance:'Stretching, load management, strengthening, footwear advice.',modalities:'Taping, orthotics, night splints, shockwave (chronic)',package:'Orthopedic Package'},
+  {condition:'Tendinopathy (achilles/tennis elbow)',overview:'Tendon pain from overload/degeneration.',duration:'6–12 weeks; chronic 3–6 months.',physio_importance:'Gradual load-progression, eccentric loading.',modalities:'High-load eccentrics, shockwave (chronic), taping',package:'Orthopedic Package'},
+  {condition:'Low Back Pain',overview:'Pain in lumbar area; acute to chronic forms.',duration:'Acute 2–4 weeks; subacute/chronic 6–12+ weeks.',physio_importance:'Reduce pain, improve movement control, strengthen core.',modalities:'Exercise, education, manual therapy, TENS/heat',package:'Orthopedic Package'},
+  {condition:'Osteoarthritis (Knee/Hip)',overview:'Wear and tear of joint cartilage causing pain/stiffness.',duration:'8–12 weeks for meaningful improvement; maintenance ongoing.',physio_importance:'Strengthen muscles around joint, improve mobility.',modalities:'Exercise, walking programme, TENS/heat, orthotics',package:'Orthopedic Package'},
+  {condition:'Neck Pain',overview:'Pain in cervical spine; acute or chronic.',duration:'Acute 2–4 weeks; chronic 6–12+ weeks.',physio_importance:'Restore motion, reduce pain, strengthen postural muscles.',modalities:'Exercise, manual therapy, heat/TENS',package:'Orthopedic Package'},
+  {condition:'Frozen Shoulder (Adhesive Capsulitis)',overview:'Progressive shoulder stiffness and pain.',duration:'9 months–2 years; active physio 3–12+ months.',physio_importance:'Relieve pain, maintain motion, gradual stretching/mobilisation.',modalities:'Manual therapy/joint mobilisation, exercises, modalities for pain',package:'Orthopedic Package'},
+  {condition:"Parkinson's Disease",overview:'Progressive neurological condition causing movement slowness and balance issues.',duration:'Rehab ongoing; blocks of 8–12 weeks; lifelong maintenance.',physio_importance:'Improve gait, balance, transfers, reduce fall risk.',modalities:'Gait training, balance exercises, cueing, task training',package:'Neurological Package'},
+  {condition:'Postnatal Physiotherapy',overview:'Rehab after childbirth (pelvic floor, core, posture).',duration:'4–12 weeks initial; may continue longer.',physio_importance:'Restore pelvic floor function, core strength, posture.',modalities:'Pelvic floor training, core exercises, biofeedback',package:'Senior Citizen'},
+  {condition:'Prenatal Physiotherapy',overview:'Antenatal care for pain, posture and pelvic floor.',duration:'Weeks–months as needed; symptom-based.',physio_importance:'Reduce back/pelvic pain, prepare pelvic floor.',modalities:'Exercise, posture advice, manual therapy, education',package:'Senior Citizen'},
+  {condition:'Stroke Rehabilitation',overview:'Recovery after brain stroke affecting movement/speech.',duration:'Major gains 3–6 months; rehab 6–12+ months or lifelong.',physio_importance:'Restore mobility, strength, balance, ADLs; neuro-retraining.',modalities:'Neuro-rehab exercises, gait training, task-specific training, electrical stimulation',package:'Neurological Package'},
+  {condition:'Muscular Dystrophy',overview:'Progressive muscle weakness disorders (chronic).',duration:'Lifelong physiotherapy to maintain function.',physio_importance:'Maintain mobility, slow loss of function, prevent contractures.',modalities:'Stretching, strengthening (as tolerated), positioning',package:'Neurological Package'},
+  {condition:'Multiple Sclerosis',overview:'Neurological disease with relapses and progression.',duration:'Rehab ongoing; 6–12 week courses; maintenance long-term.',physio_importance:'Improve mobility, reduce fatigue, maintain strength.',modalities:'Exercise programmes, balance training, energy-conservation',package:'Neurological Package'},
+  {condition:"Erb's Palsy (Brachial Plexus Birth Injury)",overview:'Nerve injury at birth causing arm weakness.',duration:'Weeks–months mild; severe months–years.',physio_importance:'Improve movement, prevent contractures, stimulate activation.',modalities:'Neuro-developmental therapy, passive/active exercises',package:'Orthopedic Package'},
+  {condition:'Carpal Tunnel Syndrome',overview:'Median nerve compression at wrist causing numbness/weakness.',duration:'Weeks–months conservative; post-op rehab 4–8 weeks.',physio_importance:'Reduce nerve irritation, improve hand function.',modalities:'Nerve gliding, exercises, ice; post-op scar/nerve mobilisation',package:'Orthopedic Package'},
+  {condition:'Cerebral Palsy',overview:'Non-progressive brain injury causing lifelong motor impairment.',duration:'Lifelong with periodic intensive blocks.',physio_importance:'Improve mobility, prevent contractures, train function.',modalities:'Stretching, strengthening, gait training, positioning',package:'Neurological Package'},
+  {condition:"Bell's Palsy",overview:'Facial nerve weakness causing drooping of one side of face.',duration:'Majority recover within 3–6 months.',physio_importance:'Facial retraining, neuromuscular facilitation for symmetry.',modalities:'Facial exercises, neuromuscular re-education; electrical stimulation',package:'Neurological Package'},
+  {condition:'Ankle Sprain',overview:'Ligament stretch/tear from twisting injury.',duration:'Mild 1–3 weeks; moderate 4–6 weeks; severe 6–12 weeks.',physio_importance:'Reduce pain/swelling, restore ROM, strength, proprioception.',modalities:'RICE initially, balance training, strengthening, taping',package:'Orthopedic Package'}
+];
+
+/* ─────────────────────────────────────────────────────────────────
+   CONSTANTS
+   ───────────────────────────────────────────────────────────────── */
+const B = {
+  navy:'#0F2D5E', blue:'#2563EB', teal:'#0BA399', purple:'#7C3AED',
+  red:'#DC2626', green:'#16A34A', amber:'#D97706',
+  blueLt:'#EFF6FF', tealLt:'#F0FDFA', redLt:'#FEF2F2', greenLt:'#F0FDF4',
+  bg:'#F8FAFC', text:'#1E293B', muted:'#64748B', border:'#E2E8F0', white:'#FFFFFF'
+};
+
+const ZONES        = ['Jayanagar','Koramangala','Marathahalli','Kalyan Nagar','Electronic City','Whitefield','HSR Layout','BTM Layout'];
+const CHRONICITY   = ['Acute (< 6 weeks)','Subacute (6–12 weeks)','Chronic (> 12 weeks)'];
+const FUNCTIONAL   = ['Independent','Requires assistance','Dependent'];
+const MOBILITY_OPTS= ['Independent','Walking aid (stick/walker)','Wheelchair','Bedridden'];
+const COMBOS       = ['Diabetes','Hypertension','Cardiac','Obesity','Osteoporosis','Post-surgical','None'];
+const NEURO_OPTS   = ['Numbness','Tingling','Weakness','Balance issues','Cognitive changes','None'];
+const SIDE         = ['Left','Right','Bilateral','Midline','Not applicable'];
+const PAIN_TYPE    = ['Stabbing','Dull ache','Sharp','Burning','Throbbing'];
+const PAIN_FREQ    = ['Constant','Intermittent','On movement','At rest','Night pain'];
+const PHASE_COLS   = [
+  {bg:'#1D4ED8', lt:'#EFF6FF', tc:'#1E3A8A'},
+  {bg:'#0F766E', lt:'#F0FDFA', tc:'#134E4A'},
+  {bg:'#6D28D9', lt:'#F5F3FF', tc:'#3B0764'}
+];
+
+/* ─────────────────────────────────────────────────────────────────
+   STATE
+   ───────────────────────────────────────────────────────────────── */
+let state = {
+  screen: 'form',  // 'form' | 'loading' | 'plan'
+  step: 0,         // 0 | 1 | 2
+  form: {
+    name:'', age:'', gender:'Female', zone:'Jayanagar',
+    condition:'', chronicity:'Acute (< 6 weeks)', painScore:5,
+    painType:[], painFreq:[], side:'Not applicable',
+    functionalStatus:'Independent', mobility:'Independent',
+    comorbidities:[], neuro:[], goals:'', notes:''
+  },
+  plan: null,
+  error: ''
+};
+
+/* ─────────────────────────────────────────────────────────────────
+   DOM HELPERS
+   ───────────────────────────────────────────────────────────────── */
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  if (attrs) Object.entries(attrs).forEach(([k,v]) => {
+    if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
+  });
+  children.flat().forEach(c => {
+    if (c == null || c === false) return;
+    el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(c) : c);
+  });
+  return el;
+}
+const s = obj => ({ style: obj });
+
+/* ─────────────────────────────────────────────────────────────────
+   REUSABLE UI COMPONENTS
+   ───────────────────────────────────────────────────────────────── */
+function renderHeader(sub) {
+  return h('div', s({background:B.navy, padding:'13px 16px', display:'flex', alignItems:'center', gap:10}),
+    h('div', s({width:34, height:34, borderRadius:17, background:B.blue, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}),
+      h('span', s({color:'white', fontSize:18, fontWeight:700, lineHeight:'1'}), '+')
+    ),
+    h('div', null,
+      h('div', s({color:'white', fontSize:14, fontWeight:700}), 'Lifetime Health'),
+      sub ? h('div', s({color:'#93C5FD', fontSize:11, marginTop:1}), sub) : null
+    )
+  );
+}
+
+function renderStepBar() {
+  const steps = ['Patient', 'Condition', 'Clinical'];
+  const cur = state.step;
+  const bar = h('div', s({background:B.white, padding:'12px 16px', borderBottom:`1px solid ${B.border}`, display:'flex', alignItems:'center'}));
+  steps.forEach((name, i) => {
+    const done = i < cur, active = i === cur;
+    const circle = h('div', s({
+      width:26, height:26, borderRadius:13, flexShrink:0,
+      background: done?B.teal : active?B.blue : B.border,
+      color: done||active ? 'white' : B.muted,
+      fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center'
+    }), done ? '✓' : String(i+1));
+    const lbl = h('span', s({fontSize:12, fontWeight:active?600:400, color:active?B.navy:B.muted, marginLeft:5}), name);
+    bar.appendChild(h('div', s({display:'flex', alignItems:'center', flexShrink:0}), circle, lbl));
+    if (i < steps.length - 1) {
+      bar.appendChild(h('div', s({flex:1, height:1.5, background:done?B.teal:B.border, margin:'0 10px'})));
+    }
+  });
+  return bar;
+}
+
+function renderLabel(text, required) {
+  return h('div', s({fontSize:13, fontWeight:600, color:B.navy, marginBottom:6}),
+    text, required ? h('span', s({color:B.red, marginLeft:2}), '*') : null
+  );
+}
+
+function renderInput(val, onchange, placeholder, type='text') {
+  const el = h('input', {type, placeholder, value:val, style:{
+    width:'100%', padding:'11px 12px', borderRadius:8,
+    border:`1px solid ${B.border}`, fontSize:15, color:B.text, background:'white'
+  }});
+  el.addEventListener('input', e => onchange(e.target.value));
+  return el;
+}
+
+function renderSelect(val, onchange, options) {
+  const el = h('select', s({
+    width:'100%', padding:'11px 36px 11px 12px', borderRadius:8,
+    border:`1px solid ${B.border}`, fontSize:15, background:'white',
+    color:val ? B.text : B.muted
+  }));
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = 'Select...'; el.appendChild(blank);
+  options.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o;
+    if (o === val) opt.selected = true;
+    el.appendChild(opt);
+  });
+  el.addEventListener('change', e => onchange(e.target.value));
+  return el;
+}
+
+function renderChips(options, selected, toggle, label) {
+  const wrap = h('div', s({marginBottom:16}));
+  if (label) wrap.appendChild(renderLabel(label));
+  const chips = h('div', s({display:'flex', flexWrap:'wrap', gap:7}));
+  options.forEach(o => {
+    const sel = (selected||[]).includes(o);
+    const chip = h('button', {type:'button', style:{
+      padding:'7px 13px', borderRadius:20,
+      border:`1.5px solid ${sel?B.blue:B.border}`,
+      background:sel?B.blueLt:'white', color:sel?B.navy:B.muted,
+      fontSize:13, fontWeight:sel?600:400, cursor:'pointer'
+    }}, o);
+    chip.addEventListener('click', () => toggle(o));
+    chips.appendChild(chip);
+  });
+  wrap.appendChild(chips);
+  return wrap;
+}
+
+function renderRadio(options, selected, onChange, label) {
+  const wrap = h('div', s({marginBottom:16}));
+  if (label) wrap.appendChild(renderLabel(label));
+  const group = h('div', s({display:'flex', flexWrap:'wrap', gap:7}));
+  options.forEach(o => {
+    const sel = selected === o;
+    const btn = h('button', {type:'button', style:{
+      padding:'8px 13px', borderRadius:8,
+      border:`1.5px solid ${sel?B.blue:B.border}`,
+      background:sel?B.blue:'white', color:sel?'white':B.text,
+      fontSize:13, fontWeight:sel?600:400, cursor:'pointer'
+    }}, o);
+    btn.addEventListener('click', () => { onChange(o); render(); });
+    group.appendChild(btn);
+  });
+  wrap.appendChild(group);
+  return wrap;
+}
+
+function renderPainSlider() {
+  const v = state.form.painScore;
+  const painColor = v <= 3 ? B.green : v <= 6 ? B.amber : B.red;
+  const wrap = h('div', s({marginBottom:16}));
+  wrap.appendChild(renderLabel('Pain score (NRS 0–10)', true));
+  const row = h('div', s({display:'flex', alignItems:'center', gap:12}));
+  const slider = h('input', {type:'range', min:0, max:10, step:1, value:v});
+  const badge  = h('div', s({
+    width:44, height:44, borderRadius:22, background:painColor,
+    color:'white', fontSize:18, fontWeight:700,
+    display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0
+  }), String(v));
+  slider.addEventListener('input', e => {
+    const nv = parseInt(e.target.value);
+    state.form.painScore = nv;
+    badge.textContent = String(nv);
+    badge.style.background = nv <= 3 ? B.green : nv <= 6 ? B.amber : B.red;
+  });
+  row.appendChild(slider); row.appendChild(badge);
+  wrap.appendChild(row);
+  wrap.appendChild(h('div', s({display:'flex', justifyContent:'space-between', fontSize:11, color:B.muted, marginTop:3}),
+    h('span', null, '0 — No pain'), h('span', null, '10 — Worst pain')
+  ));
+  return wrap;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   FORM STEPS
+   ───────────────────────────────────────────────────────────────── */
+function upd(k, v) { state.form = {...state.form, [k]:v}; }
+
+function tog(k, v) {
+  const arr = state.form[k] || [];
+  if (v === 'None') { state.form[k] = ['None']; return; }
+  const filtered = arr.filter(x => x !== 'None');
+  state.form[k] = filtered.includes(v) ? filtered.filter(x => x !== v) : [...filtered, v];
+}
+
+function renderStep0() {
+  const f = state.form;
+  const sec = h('div', s({padding:16}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:3}), 'Patient details'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:20}), 'Auto-filled from booking in production — enter manually for testing'));
+
+  const nameWrap = h('div', s({marginBottom:14}));
+  nameWrap.appendChild(renderLabel('Patient name'));
+  nameWrap.appendChild(renderInput(f.name, v => upd('name', v), 'e.g. Meena Sharma'));
+  sec.appendChild(nameWrap);
+
+  const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14}));
+  const ageW = h('div', null); ageW.appendChild(renderLabel('Age'));
+  ageW.appendChild(renderInput(f.age, v => upd('age', v), 'e.g. 58', 'number'));
+  const genW = h('div', null); genW.appendChild(renderLabel('Gender'));
+  genW.appendChild(renderSelect(f.gender, v => upd('gender', v), ['Female','Male','Other']));
+  grid.appendChild(ageW); grid.appendChild(genW);
+  sec.appendChild(grid);
+
+  const zoneW = h('div', s({marginBottom:14}));
+  zoneW.appendChild(renderLabel('Zone / Branch'));
+  zoneW.appendChild(renderSelect(f.zone, v => upd('zone', v), ZONES));
+  sec.appendChild(zoneW);
+  return sec;
+}
+
+function renderStep1() {
+  const f = state.form;
+  const sec = h('div', s({padding:16}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:3}), 'Condition & pain'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:20}), 'Protocol template loads automatically on diagnosis selection'));
+
+  const diagW = h('div', s({marginBottom:14}));
+  diagW.appendChild(renderLabel('Diagnosis', true));
+  const hint = h('div', s({marginTop:8, padding:'9px 12px', borderRadius:8, background:B.blueLt, fontSize:13, color:B.navy, display:f.condition?'block':'none'}));
+  if (f.condition) {
+    const proto = PROTOCOLS.find(p => p.condition === f.condition);
+    if (proto) hint.textContent = proto.overview;
+  }
+  diagW.appendChild(renderSelect(f.condition, v => {
+    upd('condition', v);
+    const proto = PROTOCOLS.find(p => p.condition === v);
+    hint.style.display = v ? 'block' : 'none';
+    if (proto) hint.textContent = proto.overview;
+  }, PROTOCOLS.map(p => p.condition)));
+  diagW.appendChild(hint);
+  sec.appendChild(diagW);
+
+  sec.appendChild(renderRadio(CHRONICITY, f.chronicity, v => upd('chronicity', v), 'Chronicity'));
+  sec.appendChild(renderPainSlider());
+  sec.appendChild(renderRadio(SIDE, f.side, v => upd('side', v), 'Affected side'));
+  sec.appendChild(renderChips(PAIN_TYPE, f.painType, v => tog('painType', v), 'Pain type'));
+  sec.appendChild(renderChips(PAIN_FREQ, f.painFreq, v => tog('painFreq', v), 'Pain frequency'));
+  return sec;
+}
+
+function renderStep2() {
+  const f = state.form;
+  const sec = h('div', s({padding:16}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:3}), 'Clinical assessment'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:20}), 'More detail produces a more personalised plan'));
+
+  sec.appendChild(renderRadio(FUNCTIONAL, f.functionalStatus, v => upd('functionalStatus', v), 'Functional status *'));
+  sec.appendChild(renderRadio(MOBILITY_OPTS, f.mobility, v => upd('mobility', v), 'Mobility *'));
+  sec.appendChild(renderChips(COMBOS, f.comorbidities, v => tog('comorbidities', v), 'Comorbidities *'));
+  sec.appendChild(renderChips(NEURO_OPTS, f.neuro, v => tog('neuro', v), 'Neurological symptoms *'));
+
+  const goalsW = h('div', s({marginBottom:14}));
+  goalsW.appendChild(renderLabel('Patient goals'));
+  const ta1 = h('textarea', {placeholder:"e.g. Walk to temple, return to cooking, play with grandchildren", rows:3, style:{
+    width:'100%', padding:'10px 12px', borderRadius:8, border:`1px solid ${B.border}`,
+    fontSize:14, resize:'none', color:B.text, lineHeight:'1.5'
+  }}, f.goals);
+  ta1.addEventListener('input', e => upd('goals', e.target.value));
+  goalsW.appendChild(ta1); sec.appendChild(goalsW);
+
+  const notesW = h('div', s({marginBottom:14}));
+  notesW.appendChild(renderLabel('Clinician notes'));
+  const ta2 = h('textarea', {placeholder:'Any additional clinical context...', rows:2, style:{
+    width:'100%', padding:'10px 12px', borderRadius:8, border:`1px solid ${B.border}`,
+    fontSize:14, resize:'none', color:B.text, lineHeight:'1.5'
+  }}, f.notes);
+  ta2.addEventListener('input', e => upd('notes', e.target.value));
+  notesW.appendChild(ta2); sec.appendChild(notesW);
+  return sec;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   AI GENERATION
+   ───────────────────────────────────────────────────────────────── */
+async function generate() {
+  const f = state.form;
+  const proto = PROTOCOLS.find(p => p.condition === f.condition);
+  if (!proto) { state.error = 'Please select a condition first'; render(); return; }
+
+  state.screen = 'loading'; state.error = ''; render();
+
+  const systemPrompt = `You are a senior physiotherapist at Lifetime Health, Bangalore generating personalised home physiotherapy treatment plans.
+
+CRITICAL: Respond ONLY with valid JSON. No markdown code blocks. No explanation text. Pure JSON only.
+
+Required JSON schema:
+{
+  "clinical_impression": "2-3 sentence clinical assessment including key risk factors",
+  "short_term_goals": ["specific measurable goal 1", "goal 2", "goal 3"],
+  "long_term_goals": ["full recovery goal 1", "patient-specific functional goal 2"],
+  "duration_weeks": 8,
+  "visit_frequency": "5x/week (Wk 1-2), 3x/week (Wk 3-6), 2x/week (Wk 7+)",
+  "phases": [
+    {
+      "number": 1,
+      "name": "Phase name",
+      "week_range": "Week 1-2",
+      "goals": ["phase goal 1", "phase goal 2", "phase goal 3"],
+      "exercises": [
+        {"name": "Exercise name", "prescription": "3 sets x 10 reps, 2x daily"},
+        {"name": "Exercise 2", "prescription": "prescription"},
+        {"name": "Exercise 3", "prescription": "prescription"},
+        {"name": "Exercise 4", "prescription": "prescription"},
+        {"name": "Exercise 5", "prescription": "prescription"}
+      ],
+      "modalities": "specific modality with duration",
+      "precautions": "key precautions for this phase"
+    }
+  ],
+  "metrics": [
+    {"name": "NRS Pain Score", "baseline": "${f.painScore}/10", "target": "2/10 or less", "frequency": "Every session"},
+    {"name": "Condition-specific measure", "baseline": "assessed at first visit", "target": "clinically meaningful target", "frequency": "Every 7 visits"},
+    {"name": "Functional outcome", "baseline": "current level", "target": "target level", "frequency": "Every 7 visits"}
+  ],
+  "red_flags": ["specific warning sign 1", "warning 2", "warning 3", "warning 4", "warning 5"],
+  "home_advice": ["specific advice 1", "advice 2", "advice 3", "advice 4", "advice 5"],
+  "package": "package name from protocol"
+}
+
+Clinical rules — apply ALL that match the patient profile:
+- Use the protocol template as the clinical backbone. Exercises must be appropriate for the condition.
+- Age 65+: always include fall prevention in red_flags and home_advice
+- Diabetes: add Blood Glucose monitoring to metrics; mention wound healing caution in advice
+- Cardiac: add SpO2 monitoring note
+- High pain (7+/10): Phase 1 must be conservative — isometric only, no loaded movement
+- Chronic (>12 weeks): extend duration_weeks; add pain neuroscience education to home_advice
+- Neurological conditions: add caregiver education to home_advice; include GCS monitoring note for stroke
+- Short conditions (ankle sprain, Bell's palsy): 2 phases maximum`;
+
+  const userMessage = `PROTOCOL TEMPLATE:
+${JSON.stringify(proto, null, 2)}
+
+PATIENT ASSESSMENT:
+Name: ${f.name || 'Patient'} | Age: ${f.age || 'not specified'}y | Gender: ${f.gender} | Zone: ${f.zone}
+Diagnosis: ${f.condition}
+Chronicity: ${f.chronicity}
+Pain Score: ${f.painScore}/10
+Pain Type: ${f.painType.length ? f.painType.join(', ') : 'not specified'}
+Pain Frequency: ${f.painFreq.length ? f.painFreq.join(', ') : 'not specified'}
+Affected Side: ${f.side}
+Functional Status: ${f.functionalStatus}
+Mobility: ${f.mobility}
+Comorbidities: ${f.comorbidities.length ? f.comorbidities.join(', ') : 'None'}
+Neurological Symptoms: ${f.neuro.length ? f.neuro.join(', ') : 'None'}
+Patient Goals: ${f.goals || 'return to normal daily activities'}
+Clinician Notes: ${f.notes || 'none'}
+
+Generate treatment plan as JSON:`;
+
+  try {
+    const res = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        system: systemPrompt,
+        messages: [{ role: 'user', content: userMessage }]
+      })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Server error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.content?.find(b => b.type === 'text')?.text || '';
+    const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    state.plan = { ...parsed, _form: f };
+    state.screen = 'plan';
+
+  } catch (err) {
+    console.error('Generation error:', err);
+    state.error = err.message || 'Generation failed. Check your connection and try again.';
+    state.screen = 'form';
+  }
+
+  render();
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SCREENS
+   ───────────────────────────────────────────────────────────────── */
+function renderLoading() {
+  const f = state.form;
+  const wrap = h('div', s({minHeight:'100vh', background:B.navy, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:32, textAlign:'center'}));
+  const ring = h('div', s({width:52, height:52, borderRadius:26, border:'4px solid rgba(255,255,255,0.15)', borderTopColor:B.blue, marginBottom:24}));
+  ring.classList.add('spin');
+  wrap.appendChild(ring);
+  wrap.appendChild(h('div', s({color:'white', fontSize:20, fontWeight:700, marginBottom:8}), 'Generating plan...'));
+  wrap.appendChild(h('div', s({color:'#93C5FD', fontSize:14, lineHeight:'1.7'}),
+    `Personalising ${f.condition || 'protocol'} for ${f.name || 'your patient'}`
+  ));
+  const steps2 = h('div', s({marginTop:28, display:'flex', flexDirection:'column', gap:10, textAlign:'left', width:'100%', maxWidth:280}));
+  ['Matching protocol template','Applying patient profile','Personalising exercises','Building phase plan'].forEach(step => {
+    steps2.appendChild(h('div', s({display:'flex', alignItems:'center', gap:10, color:'#93C5FD', fontSize:13}),
+      h('span', s({width:6, height:6, borderRadius:3, background:B.teal, flexShrink:0, display:'inline-block'})),
+      step
+    ));
+  });
+  wrap.appendChild(steps2);
+  return wrap;
+}
+
+function renderPlan() {
+  const p = state.plan;
+  const f = p._form;
+  const wrap = h('div', s({background:B.bg, minHeight:'100vh'}));
+
+  // Header
+  wrap.appendChild(renderHeader('Treatment Plan'));
+
+  // Patient hero
+  const hero = h('div', s({background:B.navy, padding:'14px 16px 18px'}));
+  hero.appendChild(h('div', s({color:'white', fontSize:21, fontWeight:700, marginBottom:2}), f.name || 'Patient'));
+  hero.appendChild(h('div', s({color:'#93C5FD', fontSize:13}), (f.age?f.age+'y · ':'')+f.gender+' · '+f.zone));
+  hero.appendChild(h('div', s({display:'inline-block', marginTop:8, padding:'4px 12px', borderRadius:20, background:'rgba(37,99,235,0.3)', color:'#93C5FD', fontSize:12, fontWeight:500}), f.condition));
+  wrap.appendChild(hero);
+
+  // Stat pills
+  const painC = f.painScore >= 7 ? B.red : f.painScore >= 4 ? B.amber : B.green;
+  const stats = h('div', s({background:'white', padding:'10px 16px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, borderBottom:`1px solid ${B.border}`}));
+  [{label:'Pain',val:`${f.painScore}/10`,c:painC},{label:'Duration',val:`${p.duration_weeks}w`,c:B.blue},{label:'Package',val:p.package||f.condition.split(' ')[0],c:B.teal}].forEach(({label,val,c}) => {
+    stats.appendChild(h('div', s({textAlign:'center', padding:'8px 4px', borderRadius:8, background:B.bg}),
+      h('div', s({fontSize:11, color:B.muted, marginBottom:2}), label),
+      h('div', s({fontSize:15, fontWeight:700, color:c}), val)
+    ));
+  });
+  wrap.appendChild(stats);
+
+  const body = h('div', s({padding:'12px 16px'}));
+
+  // Prototype notice
+  body.appendChild(h('div', s({marginBottom:12, padding:'10px 12px', borderRadius:8, background:'#FFF7ED', border:'1px solid #FED7AA', fontSize:12, color:'#92400E', lineHeight:'1.5'}),
+    'Prototype — AI-generated plan based on Lifetime Health protocol templates. Review before sharing with patient.'
+  ));
+
+  // Clinical impression
+  const imp = h('div', s({background:'white', borderRadius:10, padding:14, marginBottom:12, borderLeft:`4px solid ${B.blue}`}));
+  imp.appendChild(h('div', s({fontSize:11, fontWeight:600, color:B.blue, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:6}), 'Clinical impression'));
+  imp.appendChild(h('div', s({fontSize:14, color:B.text, lineHeight:'1.65'}), p.clinical_impression || ''));
+  body.appendChild(imp);
+
+  // Goals + visit plan
+  const goals = h('div', s({background:'white', borderRadius:10, padding:14, marginBottom:12}));
+  goals.appendChild(h('div', s({fontSize:11, fontWeight:600, color:B.navy, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:10}), 'Goals & visit plan'));
+  const gg = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}));
+  [['Short-term', p.short_term_goals||[]], ['Long-term', p.long_term_goals||[]]].forEach(([lbl, items]) => {
+    const col = h('div', null);
+    col.appendChild(h('div', s({fontSize:12, color:B.muted, marginBottom:5, fontWeight:600}), lbl));
+    items.forEach(g => col.appendChild(h('div', s({fontSize:13, color:B.text, padding:'3px 0', borderBottom:`1px solid ${B.border}`}), '→ '+g)));
+    gg.appendChild(col);
+  });
+  goals.appendChild(gg);
+  const vp = h('div', s({padding:'8px 12px', borderRadius:8, background:B.tealLt, fontSize:13, color:'#0A3D38'}));
+  vp.appendChild(h('strong', null, 'Visit plan: '));
+  vp.appendChild(document.createTextNode(p.visit_frequency || ''));
+  goals.appendChild(vp);
+  body.appendChild(goals);
+
+  // Phase cards
+  (p.phases || []).forEach((phase, i) => {
+    const pc = PHASE_COLS[i] || PHASE_COLS[PHASE_COLS.length-1];
+    const card = h('div', s({borderRadius:10, marginBottom:12, overflow:'hidden', border:`1.5px solid ${pc.bg}`}));
+
+    const phHdr = h('div', s({background:pc.bg, padding:'11px 14px'}));
+    phHdr.appendChild(h('div', s({color:'white', fontSize:15, fontWeight:700}), `Phase ${phase.number} — ${phase.name}`));
+    phHdr.appendChild(h('div', s({color:'rgba(255,255,255,0.75)', fontSize:12, marginTop:2}), phase.week_range));
+    card.appendChild(phHdr);
+
+    const gRow = h('div', s({background:pc.lt, padding:'8px 14px', borderBottom:`1px solid ${pc.bg}20`}));
+    gRow.appendChild(h('div', s({fontSize:12, fontWeight:600, color:pc.tc, marginBottom:3}), 'Goals:'));
+    gRow.appendChild(h('div', s({fontSize:13, color:pc.tc}), (phase.goals||[]).join(' · ')));
+    card.appendChild(gRow);
+
+    (phase.exercises || []).forEach((ex, ei) => {
+      const row = h('div', s({padding:'9px 14px', borderBottom:`1px solid ${B.border}`, background:ei%2===0?'white':B.bg}));
+      row.appendChild(h('div', s({fontSize:13, fontWeight:600, color:B.text}),
+        h('span', s({width:7, height:7, borderRadius:3.5, background:pc.bg, display:'inline-block', marginRight:8, verticalAlign:'middle'})),
+        ex.name
+      ));
+      row.appendChild(h('div', s({fontSize:12, color:B.muted, marginTop:2, paddingLeft:15}), ex.prescription));
+      card.appendChild(row);
+    });
+
+    const foot = h('div', s({background:B.bg, padding:'8px 14px', borderTop:`1px solid ${B.border}`}));
+    const mod = h('div', s({fontSize:12, color:B.text, marginBottom:3}));
+    mod.appendChild(h('strong', s({color:B.muted}), 'Modalities: '));
+    mod.appendChild(document.createTextNode(phase.modalities || ''));
+    foot.appendChild(mod);
+    foot.appendChild(h('div', s({fontSize:12, color:B.amber}), '⚠ ' + phase.precautions));
+    card.appendChild(foot);
+    body.appendChild(card);
+  });
+
+  // Metrics table
+  const mt = h('div', s({background:'white', borderRadius:10, padding:14, marginBottom:12}));
+  mt.appendChild(h('div', s({fontSize:11, fontWeight:600, color:B.navy, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:4}), 'Track every visit'));
+  const mhdr = h('div', s({display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:8, padding:'6px 0', borderBottom:`1.5px solid ${B.navy}`}));
+  ['Metric','Baseline','Target'].forEach(l => mhdr.appendChild(h('div', s({fontSize:11, fontWeight:600, color:B.muted}), l)));
+  mt.appendChild(mhdr);
+  (p.metrics || []).forEach((m, i) => {
+    const row = h('div', s({display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:8, padding:'7px 0', borderBottom:i<p.metrics.length-1?`1px solid ${B.border}`:'none', alignItems:'center'}));
+    row.appendChild(h('div', s({fontSize:13, fontWeight:500, color:B.text}), m.name));
+    row.appendChild(h('div', s({fontSize:12, fontWeight:600, color:B.amber}), m.baseline));
+    row.appendChild(h('div', s({fontSize:12, fontWeight:600, color:B.green}), m.target));
+    mt.appendChild(row);
+  });
+  body.appendChild(mt);
+
+  // Red flags + home advice
+  const two = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14}));
+  [
+    [p.red_flags||[], 'Red flags', B.red, '#7F1D1D', '#FEE2E2', '#FECACA', '▸'],
+    [p.home_advice||[], 'Home advice', B.green, '#14532D', '#F0FDF4', '#BBF7D0', '✓']
+  ].forEach(([items, label, hc, tc, bg, bc, icon]) => {
+    const box = h('div', s({background:bg, borderRadius:10, padding:12, border:`1px solid ${bc}`}));
+    box.appendChild(h('div', s({fontSize:11, fontWeight:600, color:hc, textTransform:'uppercase', letterSpacing:'0.7px', marginBottom:7}), label));
+    items.forEach((item, i2) => {
+      box.appendChild(h('div', s({fontSize:12, color:tc, padding:'3px 0', borderBottom:i2<items.length-1?`1px solid ${bc}`:'none', lineHeight:'1.4'}), icon+' '+item));
+    });
+    two.appendChild(box);
+  });
+  body.appendChild(two);
+
+  // Action buttons
+  const acts = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, paddingBottom:24}));
+  const btn1 = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:14, fontWeight:500, cursor:'pointer'}}, 'New assessment');
+  btn1.addEventListener('click', () => { state.plan = null; state.screen = 'form'; state.step = 0; render(); });
+  const btn2 = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.blue, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, 'Edit & regenerate');
+  btn2.addEventListener('click', () => { state.screen = 'form'; state.step = 0; render(); });
+  acts.appendChild(btn1); acts.appendChild(btn2);
+  body.appendChild(acts);
+
+  wrap.appendChild(body);
+  return wrap;
+}
+
+function renderForm() {
+  const wrap = h('div', s({background:B.bg, minHeight:'100vh', display:'flex', flexDirection:'column'}));
+  wrap.appendChild(renderHeader('Care Plan Generator — Prototype v1'));
+  wrap.appendChild(renderStepBar());
+
+  const content = h('div', s({flex:1, paddingBottom:10}));
+  const panel = {0:renderStep0, 1:renderStep1, 2:renderStep2}[state.step]?.();
+  if (panel) { panel.classList.add('fade-up'); content.appendChild(panel); }
+  wrap.appendChild(content);
+
+  if (state.error) {
+    wrap.appendChild(h('div', s({margin:'0 16px 8px', padding:10, borderRadius:8, background:B.redLt, color:B.red, fontSize:13}), state.error));
+  }
+
+  // Navigation bar
+  const nav = h('div', s({padding:'12px 16px', background:'white', borderTop:`1px solid ${B.border}`, display:'flex', gap:10, position:'sticky', bottom:0}));
+  const isLast  = state.step === 2;
+  const canNext = state.step !== 1 || state.form.condition.length > 0;
+
+  if (state.step > 0) {
+    const back = h('button', {type:'button', style:{flex:'1', padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:15, fontWeight:500, cursor:'pointer'}}, '← Back');
+    back.addEventListener('click', () => { state.step--; render(); });
+    nav.appendChild(back);
+  }
+
+  const fwd = h('button', {type:'button', style:{
+    flex:'2', padding:'13px 0', borderRadius:10, border:'none',
+    background: canNext ? (isLast ? B.teal : B.blue) : B.border,
+    color: canNext ? 'white' : B.muted,
+    fontSize:15, fontWeight:600, cursor: canNext ? 'pointer' : 'default'
+  }}, isLast ? 'Generate plan →' : 'Next →');
+
+  if (canNext) fwd.addEventListener('click', () => { if (isLast) generate(); else { state.step++; render(); } });
+  nav.appendChild(fwd);
+  wrap.appendChild(nav);
+  return wrap;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   RENDER LOOP
+   ───────────────────────────────────────────────────────────────── */
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  let screen;
+  if (state.screen === 'loading') screen = renderLoading();
+  else if (state.screen === 'plan' && state.plan) screen = renderPlan();
+  else screen = renderForm();
+  app.appendChild(screen);
+  window.scrollTo(0, 0);
+}
+
+render();
+</script>
+</body>
+</html>
