@@ -165,7 +165,7 @@ function renderStepBar() {
 }
 
 function renderLabel(text, required) {
-  return h('div', s({fontSize:13, fontWeight:600, color:B.navy, marginBottom:6}),
+  return h('div', s({fontSize:13, fontWeight:600, color:B.navy, marginBottom:8}),
     text, required ? h('span', s({color:B.red, marginLeft:2}), '*') : null
   );
 }
@@ -198,7 +198,7 @@ function renderSelect(val, onchange, options) {
 }
 
 function renderChips(options, selected, toggle, label) {
-  const wrap = h('div', s({marginBottom:16}));
+  const wrap = h('div', s({marginBottom:22}));
   if (label) wrap.appendChild(renderLabel(label));
   const chips = h('div', s({display:'flex', flexWrap:'wrap', gap:7}));
   options.forEach(o => {
@@ -217,7 +217,7 @@ function renderChips(options, selected, toggle, label) {
 }
 
 function renderRadio(options, selected, onChange, label) {
-  const wrap = h('div', s({marginBottom:16}));
+  const wrap = h('div', s({marginBottom:22}));
   if (label) wrap.appendChild(renderLabel(label));
   const group = h('div', s({display:'flex', flexWrap:'wrap', gap:7}));
   options.forEach(o => {
@@ -255,7 +255,7 @@ function renderPainSlider() {
   });
   row.appendChild(slider); row.appendChild(badge);
   wrap.appendChild(row);
-  wrap.appendChild(h('div', s({display:'flex', justifyContent:'space-between', fontSize:11, color:B.muted, marginTop:3}),
+  wrap.appendChild(h('div', s({display:'flex', justifyContent:'space-between', fontSize:11, color:B.muted, marginTop:5}),
     h('span', null, '0 — No pain'), h('span', null, '10 — Worst pain')
   ));
   return wrap;
@@ -275,16 +275,16 @@ function tog(k, v) {
 
 function renderStep0() {
   const f = state.form;
-  const sec = h('div', s({padding:16}));
-  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:3}), 'Patient details'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:20}), 'Auto-filled from booking in production — enter manually for testing'));
+  const sec = h('div', s({padding:'20px 22px'}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:5}), 'Patient details'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:24}), 'Auto-filled from booking in production — enter manually for testing'));
 
-  const nameWrap = h('div', s({marginBottom:14}));
+  const nameWrap = h('div', s({marginBottom:20}));
   nameWrap.appendChild(renderLabel('Patient name'));
   nameWrap.appendChild(renderInput(f.name, v => upd('name', v), 'e.g. Meena Sharma'));
   sec.appendChild(nameWrap);
 
-  const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:14}));
+  const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:20}));
   const ageW = h('div', null); ageW.appendChild(renderLabel('Age'));
   ageW.appendChild(renderInput(f.age, v => upd('age', v), 'e.g. 58', 'number'));
   const genW = h('div', null); genW.appendChild(renderLabel('Gender'));
@@ -292,7 +292,7 @@ function renderStep0() {
   grid.appendChild(ageW); grid.appendChild(genW);
   sec.appendChild(grid);
 
-  const zoneW = h('div', s({marginBottom:14}));
+  const zoneW = h('div', s({marginBottom:20}));
   zoneW.appendChild(renderLabel('Zone / Branch'));
   zoneW.appendChild(renderSelect(f.zone, v => upd('zone', v), ZONES));
   sec.appendChild(zoneW);
@@ -301,11 +301,11 @@ function renderStep0() {
 
 function renderStep1() {
   const f = state.form;
-  const sec = h('div', s({padding:16}));
-  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:3}), 'Condition & pain'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:20}), 'Protocol template loads automatically on diagnosis selection'));
+  const sec = h('div', s({padding:'20px 22px'}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:5}), 'Condition & pain'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:24}), 'Protocol template loads automatically on diagnosis selection'));
 
-  const diagW = h('div', s({marginBottom:14}));
+  const diagW = h('div', s({marginBottom:20}));
   diagW.appendChild(renderLabel('Diagnosis', true));
   const hint = h('div', s({marginTop:8, padding:'9px 12px', borderRadius:8, background:B.blueLt, fontSize:13, color:B.navy, display:f.condition?'block':'none'}));
   if (f.condition) {
@@ -329,29 +329,29 @@ function renderStep1() {
 
 function renderStep2() {
   const f = state.form;
-  const sec = h('div', s({padding:16}));
-  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:3}), 'Clinical assessment'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:20}), 'More detail produces a more personalised plan'));
+  const sec = h('div', s({padding:'20px 22px'}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:5}), 'Clinical assessment'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:24}), 'More detail produces a more personalised plan'));
 
   sec.appendChild(renderRadio(FUNCTIONAL, f.functionalStatus, v => upd('functionalStatus', v), 'Functional status *'));
   sec.appendChild(renderRadio(MOBILITY_OPTS, f.mobility, v => upd('mobility', v), 'Mobility *'));
   sec.appendChild(renderChips(COMBOS, f.comorbidities, v => tog('comorbidities', v), 'Comorbidities *'));
   sec.appendChild(renderChips(NEURO_OPTS, f.neuro, v => tog('neuro', v), 'Neurological symptoms *'));
 
-  const goalsW = h('div', s({marginBottom:14}));
+  const goalsW = h('div', s({marginBottom:20}));
   goalsW.appendChild(renderLabel('Patient goals'));
   const ta1 = h('textarea', {placeholder:"e.g. Walk to temple, return to cooking, play with grandchildren", rows:3, style:{
     width:'100%', padding:'10px 12px', borderRadius:8, border:`1px solid ${B.border}`,
-    fontSize:14, resize:'none', color:B.text, lineHeight:'1.5'
+    fontSize:14, resize:'none', color:B.text, lineHeight:'1.6'
   }}, f.goals);
   ta1.addEventListener('input', e => upd('goals', e.target.value));
   goalsW.appendChild(ta1); sec.appendChild(goalsW);
 
-  const notesW = h('div', s({marginBottom:14}));
+  const notesW = h('div', s({marginBottom:20}));
   notesW.appendChild(renderLabel('Clinician notes'));
   const ta2 = h('textarea', {placeholder:'Any additional clinical context...', rows:2, style:{
     width:'100%', padding:'10px 12px', borderRadius:8, border:`1px solid ${B.border}`,
-    fontSize:14, resize:'none', color:B.text, lineHeight:'1.5'
+    fontSize:14, resize:'none', color:B.text, lineHeight:'1.6'
   }}, f.notes);
   ta2.addEventListener('input', e => upd('notes', e.target.value));
   notesW.appendChild(ta2); sec.appendChild(notesW);
