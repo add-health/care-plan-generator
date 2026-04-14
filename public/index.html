@@ -286,16 +286,16 @@ function tog(k, v) {
 
 function renderStep0() {
   const f = state.form;
-  const sec = h('div', s({padding:'20px 22px'}));
-  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:5}), 'Patient details'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:24}), 'Auto-filled from booking in production — enter manually for testing'));
+  const sec = h('div', s({padding:'26px 22px'}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:10}), 'Patient details'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:32}), 'Auto-filled from booking in production — enter manually for testing'));
 
-  const nameWrap = h('div', s({marginBottom:20}));
+  const nameWrap = h('div', s({marginBottom:26}));
   nameWrap.appendChild(renderLabel('Patient name', true));
   nameWrap.appendChild(renderInput(f.name, v => { upd('name', v); patchNavBtn(); }, 'e.g. Meena Sharma'));
   sec.appendChild(nameWrap);
 
-  const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:20}));
+  const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:26}));
   const ageW = h('div', null); ageW.appendChild(renderLabel('Age', true));
   ageW.appendChild(renderInput(f.age, v => { upd('age', v); patchNavBtn(); }, 'e.g. 58', 'number'));
   const genW = h('div', null); genW.appendChild(renderLabel('Gender'));
@@ -303,7 +303,7 @@ function renderStep0() {
   grid.appendChild(ageW); grid.appendChild(genW);
   sec.appendChild(grid);
 
-  const zoneW = h('div', s({marginBottom:20}));
+  const zoneW = h('div', s({marginBottom:26}));
   zoneW.appendChild(renderLabel('Zone / Branch'));
   zoneW.appendChild(renderSelect(f.zone, v => upd('zone', v), ZONES));
   sec.appendChild(zoneW);
@@ -312,11 +312,11 @@ function renderStep0() {
 
 function renderStep1() {
   const f = state.form;
-  const sec = h('div', s({padding:'20px 22px'}));
-  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:5}), 'Condition & pain'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:24}), 'Protocol template loads automatically on diagnosis selection'));
+  const sec = h('div', s({padding:'26px 22px'}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:10}), 'Condition & pain'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:32}), 'Protocol template loads automatically on diagnosis selection'));
 
-  const diagW = h('div', s({marginBottom:20}));
+  const diagW = h('div', s({marginBottom:26}));
   diagW.appendChild(renderLabel('Diagnosis', true));
   const hint = h('div', s({marginTop:8, padding:'9px 12px', borderRadius:8, background:B.blueLt, fontSize:13, color:B.navy, display:f.condition?'block':'none'}));
   if (f.condition) {
@@ -340,9 +340,9 @@ function renderStep1() {
 
 function renderStep2() {
   const f = state.form;
-  const sec = h('div', s({padding:'20px 22px'}));
-  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:5}), 'Clinical assessment'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:24}), 'More detail produces a more personalised plan'));
+  const sec = h('div', s({padding:'26px 22px'}));
+  sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:10}), 'Clinical assessment'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:32}), 'More detail produces a more personalised plan'));
 
   sec.appendChild(renderRadio(FUNCTIONAL, f.functionalStatus, v => upd('functionalStatus', v), 'Functional status *'));
   sec.appendChild(renderRadio(MOBILITY_OPTS, f.mobility, v => upd('mobility', v), 'Mobility *'));
