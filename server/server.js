@@ -2,7 +2,12 @@ const express = require('express');
 const fetch   = require('node-fetch');
 const cors    = require('cors');
 const path    = require('path');
+const fs      = require('fs');
 const { PythonShell } = require('python-shell');
+
+// On Railway the venv is built at /app/.venv; locally fall back to system python3
+const VENV_PYTHON = '/app/.venv/bin/python3';
+const PYTHON_PATH = process.env.PYTHON_PATH || (fs.existsSync(VENV_PYTHON) ? VENV_PYTHON : 'python3');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -60,7 +65,6 @@ app.post('/save-pdf', async (req, res) => {
   const filename = `${safeName}_${safeCondition}_${timestamp}.pdf`;
   const outputPath = path.join(__dirname, '..', 'temp', filename);
 
-  const fs = require('fs');
   if (!fs.existsSync(path.join(__dirname, '..', 'temp'))) {
     fs.mkdirSync(path.join(__dirname, '..', 'temp'));
   }
@@ -72,7 +76,7 @@ app.post('/save-pdf', async (req, res) => {
         path.join(__dirname, '..', 'pdf-generator', 'generate_pdf.py'),
         {
           args: ['--json', JSON.stringify({ patient, plan, output: outputPath })],
-          pythonPath: process.env.PYTHON_PATH || 'python3'
+          pythonPath: PYTHON_PATH
         }
       );
       shell.on('error', reject);
