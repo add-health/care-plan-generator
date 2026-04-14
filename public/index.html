@@ -150,7 +150,7 @@ function renderHeader(sub) {
         sub ? h('div', s({color:'#7DB8F7', fontSize:13, marginTop:3}), sub) : null
       )
     ),
-    sub ? h('div', s({background:'rgba(255,255,255,0.1)', color:'#93C5FD', fontSize:10, fontWeight:600, padding:'4px 10px', borderRadius:20, letterSpacing:'0.8px'}), 'PROTOTYPE') : null
+    sub ? h('div', s({background:'rgba(255,255,255,0.1)', color:'#93C5FD', fontSize:10, fontWeight:600, padding:'4px 10px', borderRadius:20, letterSpacing:'0.8px'}), 'BETA') : null
   );
 }
 
@@ -671,7 +671,7 @@ function renderPlan() {
 
   // Prototype notice
   body.appendChild(h('div', s({marginBottom:12, padding:'10px 12px', borderRadius:8, background:'#FFF7ED', border:'1px solid #FED7AA', fontSize:12, color:'#92400E', lineHeight:'1.5'}),
-    'Prototype — AI-generated plan based on Lifetime Health protocol templates. Review before sharing with patient.'
+    'Beta — AI-generated plan based on Lifetime Health protocol templates. Review before sharing with patient.'
   ));
 
   // Clinical impression
@@ -793,7 +793,7 @@ function renderPlan() {
 
 function renderForm() {
   const wrap = h('div', s({background:B.bg, minHeight:'100vh', display:'flex', flexDirection:'column'}));
-  wrap.appendChild(renderHeader('Care Plan Generator — Prototype v1'));
+  wrap.appendChild(renderHeader('Care Plan Generator — Beta v1'));
   wrap.appendChild(renderStepBar());
 
   const content = h('div', s({flex:1, paddingTop:8, paddingBottom:10}));
