@@ -165,7 +165,7 @@ function renderStepBar() {
 }
 
 function renderLabel(text, required) {
-  return h('div', s({fontSize:13, fontWeight:600, color:B.navy, marginBottom:8}),
+  return h('div', s({fontSize:13, fontWeight:600, color:B.navy, marginBottom:10}),
     text, required ? h('span', s({color:B.red, marginLeft:2}), '*') : null
   );
 }
@@ -198,9 +198,9 @@ function renderSelect(val, onchange, options) {
 }
 
 function renderChips(options, selected, toggle, label) {
-  const wrap = h('div', s({marginBottom:22}));
+  const wrap = h('div', s({marginBottom:24}));
   if (label) wrap.appendChild(renderLabel(label));
-  const chips = h('div', s({display:'flex', flexWrap:'wrap', gap:7}));
+  const chips = h('div', s({display:'flex', flexWrap:'wrap', gap:7, marginTop:8}));
   options.forEach(o => {
     const sel = (selected||[]).includes(o);
     const chip = h('button', {type:'button', style:{
@@ -217,9 +217,9 @@ function renderChips(options, selected, toggle, label) {
 }
 
 function renderRadio(options, selected, onChange, label) {
-  const wrap = h('div', s({marginBottom:22}));
+  const wrap = h('div', s({marginBottom:24}));
   if (label) wrap.appendChild(renderLabel(label));
-  const group = h('div', s({display:'flex', flexWrap:'wrap', gap:7}));
+  const group = h('div', s({display:'flex', flexWrap:'wrap', gap:7, marginTop:8}));
   options.forEach(o => {
     const sel = selected === o;
     const btn = h('button', {type:'button', style:{
@@ -238,7 +238,7 @@ function renderRadio(options, selected, onChange, label) {
 function renderPainSlider() {
   const v = state.form.painScore;
   const painColor = v <= 3 ? B.green : v <= 6 ? B.amber : B.red;
-  const wrap = h('div', s({marginBottom:16}));
+  const wrap = h('div', s({marginBottom:24}));
   wrap.appendChild(renderLabel('Pain score (NRS 0–10)', true));
   const row = h('div', s({display:'flex', alignItems:'center', gap:12}));
   const slider = h('input', {type:'range', min:0, max:10, step:1, value:v});
@@ -286,9 +286,9 @@ function tog(k, v) {
 
 function renderStep0() {
   const f = state.form;
-  const sec = h('div', s({padding:'26px 22px'}));
+  const sec = h('div', s({padding:'20px 20px'}));
   sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:10}), 'Patient details'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:32}), 'Auto-filled from booking in production — enter manually for testing'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:28}), 'Auto-filled from booking in production — enter manually for testing'));
 
   const nameWrap = h('div', s({marginBottom:26}));
   nameWrap.appendChild(renderLabel('Patient name', true));
@@ -312,9 +312,9 @@ function renderStep0() {
 
 function renderStep1() {
   const f = state.form;
-  const sec = h('div', s({padding:'26px 22px'}));
+  const sec = h('div', s({padding:'20px 20px'}));
   sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:10}), 'Condition & pain'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:32}), 'Protocol template loads automatically on diagnosis selection'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:28}), 'Protocol template loads automatically on diagnosis selection'));
 
   const diagW = h('div', s({marginBottom:26}));
   diagW.appendChild(renderLabel('Diagnosis', true));
@@ -340,9 +340,9 @@ function renderStep1() {
 
 function renderStep2() {
   const f = state.form;
-  const sec = h('div', s({padding:'26px 22px'}));
+  const sec = h('div', s({padding:'20px 20px'}));
   sec.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:10}), 'Clinical assessment'));
-  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:32}), 'More detail produces a more personalised plan'));
+  sec.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:28}), 'More detail produces a more personalised plan'));
 
   sec.appendChild(renderRadio(FUNCTIONAL, f.functionalStatus, v => upd('functionalStatus', v), 'Functional status *'));
   sec.appendChild(renderRadio(MOBILITY_OPTS, f.mobility, v => upd('mobility', v), 'Mobility *'));
@@ -652,7 +652,7 @@ function renderForm() {
   wrap.appendChild(renderHeader('Care Plan Generator — Prototype v1'));
   wrap.appendChild(renderStepBar());
 
-  const content = h('div', s({flex:1, paddingBottom:10}));
+  const content = h('div', s({flex:1, paddingTop:8, paddingBottom:10}));
   const panel = {0:renderStep0, 1:renderStep1, 2:renderStep2}[state.step]?.();
   if (panel) { panel.classList.add('fade-up'); content.appendChild(panel); }
   wrap.appendChild(content);
