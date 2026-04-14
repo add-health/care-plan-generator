@@ -201,19 +201,28 @@ function renderSelect(val, onchange, options) {
   return el;
 }
 
-function renderChips(options, selected, toggle, label) {
+function renderChips(options, key, toggle, label) {
   const wrap = h('div', s({marginBottom:24}));
   if (label) wrap.appendChild(renderLabel(label));
   const chips = h('div', s({display:'flex', flexWrap:'wrap', gap:7, marginTop:8}));
   options.forEach(o => {
-    const sel = (selected||[]).includes(o);
+    const sel = (state.form[key]||[]).includes(o);
     const chip = h('button', {type:'button', style:{
       padding:'7px 13px', borderRadius:20,
       border:`1.5px solid ${sel?B.blue:B.border}`,
       background:sel?B.blueLt:'white', color:sel?B.navy:B.muted,
       fontSize:13, fontWeight:sel?600:400, cursor:'pointer'
     }}, o);
-    chip.addEventListener('click', () => { toggle(o); render(); });
+    chip.addEventListener('click', () => {
+      toggle(o);
+      Array.from(chips.children).forEach(sibling => {
+        const sibSel = (state.form[key]||[]).includes(sibling.textContent);
+        sibling.style.border = `1.5px solid ${sibSel ? B.blue : B.border}`;
+        sibling.style.background = sibSel ? B.blueLt : 'white';
+        sibling.style.color = sibSel ? B.navy : B.muted;
+        sibling.style.fontWeight = sibSel ? '600' : '400';
+      });
+    });
     chips.appendChild(chip);
   });
   wrap.appendChild(chips);
@@ -232,7 +241,16 @@ function renderRadio(options, selected, onChange, label) {
       background:sel?B.blue:'white', color:sel?'white':B.text,
       fontSize:13, fontWeight:sel?600:400, cursor:'pointer'
     }}, o);
-    btn.addEventListener('click', () => { onChange(o); render(); });
+    btn.addEventListener('click', () => {
+      onChange(o);
+      Array.from(group.children).forEach(sibling => {
+        const sibSel = sibling.textContent === o;
+        sibling.style.border = `1.5px solid ${sibSel ? B.blue : B.border}`;
+        sibling.style.background = sibSel ? B.blue : 'white';
+        sibling.style.color = sibSel ? 'white' : B.text;
+        sibling.style.fontWeight = sibSel ? '600' : '400';
+      });
+    });
     group.appendChild(btn);
   });
   wrap.appendChild(group);
@@ -337,8 +355,8 @@ function renderStep1() {
   sec.appendChild(renderRadio(CHRONICITY, f.chronicity, v => upd('chronicity', v), 'Chronicity'));
   sec.appendChild(renderPainSlider());
   sec.appendChild(renderRadio(SIDE, f.side, v => upd('side', v), 'Affected side'));
-  sec.appendChild(renderChips(PAIN_TYPE, f.painType, v => tog('painType', v), 'Pain type'));
-  sec.appendChild(renderChips(PAIN_FREQ, f.painFreq, v => tog('painFreq', v), 'Pain frequency'));
+  sec.appendChild(renderChips(PAIN_TYPE, 'painType', v => tog('painType', v), 'Pain type'));
+  sec.appendChild(renderChips(PAIN_FREQ, 'painFreq', v => tog('painFreq', v), 'Pain frequency'));
   return sec;
 }
 
@@ -350,8 +368,8 @@ function renderStep2() {
 
   sec.appendChild(renderRadio(FUNCTIONAL, f.functionalStatus, v => upd('functionalStatus', v), 'Functional status *'));
   sec.appendChild(renderRadio(MOBILITY_OPTS, f.mobility, v => upd('mobility', v), 'Mobility *'));
-  sec.appendChild(renderChips(COMBOS, f.comorbidities, v => tog('comorbidities', v), 'Comorbidities *'));
-  sec.appendChild(renderChips(NEURO_OPTS, f.neuro, v => tog('neuro', v), 'Neurological symptoms *'));
+  sec.appendChild(renderChips(COMBOS, 'comorbidities', v => tog('comorbidities', v), 'Comorbidities *'));
+  sec.appendChild(renderChips(NEURO_OPTS, 'neuro', v => tog('neuro', v), 'Neurological symptoms *'));
 
   const goalsW = h('div', s({marginBottom:28}));
   goalsW.appendChild(renderLabel('Patient goals'));
