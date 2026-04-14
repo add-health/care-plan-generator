@@ -513,22 +513,89 @@ Generate treatment plan as JSON:`;
    ───────────────────────────────────────────────────────────────── */
 function renderLoading() {
   const f = state.form;
-  const wrap = h('div', s({minHeight:'100vh', background:B.navy, display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:32, textAlign:'center'}));
-  const ring = h('div', s({width:52, height:52, borderRadius:26, border:'4px solid rgba(255,255,255,0.15)', borderTopColor:B.blue, marginBottom:24}));
+  const wrap = h('div', s({
+    minHeight: '100vh',
+    background: B.navy,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: '40px 32px',
+    textAlign: 'center'
+  }));
+
+  // Spinner ring
+  const ring = h('div', s({
+    width: 56,
+    height: 56,
+    borderRadius: '50%',
+    border: '4px solid rgba(255,255,255,0.12)',
+    borderTopColor: '#3B82F6',
+    marginBottom: 28,
+    flexShrink: 0
+  }));
   ring.classList.add('spin');
   wrap.appendChild(ring);
-  wrap.appendChild(h('div', s({color:'white', fontSize:20, fontWeight:700, marginBottom:8}), 'Generating plan...'));
-  wrap.appendChild(h('div', s({color:'#93C5FD', fontSize:14, lineHeight:'1.7'}),
-    `Personalising ${f.condition || 'protocol'} for ${f.name || 'your patient'}`
-  ));
-  const steps2 = h('div', s({marginTop:28, display:'flex', flexDirection:'column', gap:10, textAlign:'left', width:'100%', maxWidth:280}));
-  ['Matching protocol template','Applying patient profile','Personalising exercises','Building phase plan'].forEach(step => {
-    steps2.appendChild(h('div', s({display:'flex', alignItems:'center', gap:10, color:'#93C5FD', fontSize:13}),
-      h('span', s({width:6, height:6, borderRadius:3, background:B.teal, flexShrink:0, display:'inline-block'})),
-      step
-    ));
+
+  // Title
+  wrap.appendChild(h('div', s({
+    color: 'white',
+    fontSize: 22,
+    fontWeight: 700,
+    marginBottom: 10,
+    letterSpacing: '0.2px'
+  }), 'Generating plan...'));
+
+  // Subtitle
+  wrap.appendChild(h('div', s({
+    color: '#7DB8F7',
+    fontSize: 15,
+    lineHeight: '1.5',
+    marginBottom: 36,
+    maxWidth: 300
+  }), `Personalising ${f.condition || 'protocol'} for ${f.name || 'your patient'}`));
+
+  // Step indicators — centered, correct font size
+  const stepList = [
+    'Matching protocol template',
+    'Applying patient profile',
+    'Personalising exercises',
+    'Building phase plan'
+  ];
+
+  const stepsWrap = h('div', s({
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 12,
+    alignItems: 'flex-start',
+    width: '100%',
+    maxWidth: 260
+  }));
+
+  stepList.forEach(label => {
+    const row = h('div', s({
+      display: 'flex',
+      alignItems: 'center',
+      gap: 10
+    }));
+    const dot = h('div', s({
+      width: 8,
+      height: 8,
+      borderRadius: '50%',
+      background: B.teal,
+      flexShrink: 0
+    }));
+    const txt = h('span', s({
+      color: '#93C5FD',
+      fontSize: 14,
+      fontWeight: 400
+    }), label);
+    row.appendChild(dot);
+    row.appendChild(txt);
+    stepsWrap.appendChild(row);
   });
-  wrap.appendChild(steps2);
+
+  wrap.appendChild(stepsWrap);
   return wrap;
 }
 
