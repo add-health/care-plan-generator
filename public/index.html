@@ -266,6 +266,17 @@ function renderPainSlider() {
    ───────────────────────────────────────────────────────────────── */
 function upd(k, v) { state.form = {...state.form, [k]:v}; }
 
+// Update just the nav button appearance without a full re-render (avoids losing input focus)
+function patchNavBtn() {
+  const btn = document.getElementById('nav-fwd');
+  if (!btn) return;
+  const f = state.form;
+  const ok = f.name.trim().length > 0 && String(f.age).length > 0;
+  btn.style.background = ok ? B.blue : B.border;
+  btn.style.color = ok ? 'white' : B.muted;
+  btn.style.cursor = ok ? 'pointer' : 'default';
+}
+
 function tog(k, v) {
   const arr = state.form[k] || [];
   if (v === 'None') { state.form[k] = ['None']; return; }
@@ -281,12 +292,12 @@ function renderStep0() {
 
   const nameWrap = h('div', s({marginBottom:20}));
   nameWrap.appendChild(renderLabel('Patient name', true));
-  nameWrap.appendChild(renderInput(f.name, v => { upd('name', v); render(); }, 'e.g. Meena Sharma'));
+  nameWrap.appendChild(renderInput(f.name, v => { upd('name', v); patchNavBtn(); }, 'e.g. Meena Sharma'));
   sec.appendChild(nameWrap);
 
   const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:14, marginBottom:20}));
   const ageW = h('div', null); ageW.appendChild(renderLabel('Age', true));
-  ageW.appendChild(renderInput(f.age, v => { upd('age', v); render(); }, 'e.g. 58', 'number'));
+  ageW.appendChild(renderInput(f.age, v => { upd('age', v); patchNavBtn(); }, 'e.g. 58', 'number'));
   const genW = h('div', null); genW.appendChild(renderLabel('Gender'));
   genW.appendChild(renderSelect(f.gender, v => upd('gender', v), ['Female','Male','Other']));
   grid.appendChild(ageW); grid.appendChild(genW);
@@ -664,14 +675,22 @@ function renderForm() {
     nav.appendChild(back);
   }
 
-  const fwd = h('button', {type:'button', style:{
+  const fwd = h('button', {type:'button', id:'nav-fwd', style:{
     flex:'2', padding:'13px 0', borderRadius:10, border:'none',
     background: canNext ? (isLast ? B.teal : B.blue) : B.border,
     color: canNext ? 'white' : B.muted,
     fontSize:15, fontWeight:600, cursor: canNext ? 'pointer' : 'default'
   }}, isLast ? 'Generate plan →' : 'Next →');
 
-  if (canNext) fwd.addEventListener('click', () => { if (isLast) generate(); else { state.step++; render(); } });
+  fwd.addEventListener('click', () => {
+    const f = state.form;
+    const enabled =
+      (state.step === 0 && f.name.trim().length > 0 && String(f.age).length > 0) ||
+      (state.step === 1 && f.condition.length > 0) ||
+      state.step === 2;
+    if (!enabled) return;
+    if (isLast) generate(); else { state.step++; render(); }
+  });
   nav.appendChild(fwd);
   wrap.appendChild(nav);
   return wrap;
