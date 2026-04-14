@@ -73,10 +73,26 @@ const PROTOCOLS = [
    CONSTANTS
    ───────────────────────────────────────────────────────────────── */
 const B = {
-  navy:'#0F2D5E', blue:'#2563EB', teal:'#0BA399', purple:'#7C3AED',
-  red:'#DC2626', green:'#16A34A', amber:'#D97706',
-  blueLt:'#EFF6FF', tealLt:'#F0FDFA', redLt:'#FEF2F2', greenLt:'#F0FDF4',
-  bg:'#F8FAFC', text:'#1E293B', muted:'#64748B', border:'#E2E8F0', white:'#FFFFFF'
+  navy:    '#1A2744',
+  navy2:   '#1E2D5A',
+  blue:    '#3B6FE8',
+  blue2:   '#2563EB',
+  blueLt:  '#EEF2FF',
+  blueLt2: '#DBEAFE',
+  teal:    '#3B6FE8',
+  tealLt:  '#EEF2FF',
+  purple:  '#2563EB',
+  purpLt:  '#DBEAFE',
+  red:     '#DC2626',
+  redLt:   '#FEE2E2',
+  green:   '#2563EB',
+  greenLt: '#EEF2FF',
+  amber:   '#D97706',
+  bg:      '#F4F6FF',
+  text:    '#1A2744',
+  muted:   '#64748B',
+  border:  '#DBEAFE',
+  white:   '#FFFFFF'
 };
 
 const ZONES = [
@@ -95,10 +111,10 @@ const NEURO_OPTS   = ['Numbness','Tingling','Weakness','Balance issues','Cogniti
 const SIDE         = ['Left','Right','Bilateral','Midline','Not applicable'];
 const PAIN_TYPE    = ['Stabbing','Dull ache','Sharp','Burning','Throbbing'];
 const PAIN_FREQ    = ['Constant','Intermittent','On movement','At rest','Night pain'];
-const PHASE_COLS   = [
-  {bg:'#1D4ED8', lt:'#EFF6FF', tc:'#1E3A8A'},
-  {bg:'#0F766E', lt:'#F0FDFA', tc:'#134E4A'},
-  {bg:'#6D28D9', lt:'#F5F3FF', tc:'#3B0764'}
+const PHASE_COLS = [
+  { bg: '#2563EB', lt: '#EEF2FF', tc: '#1A2744' },
+  { bg: '#3B6FE8', lt: '#DBEAFE', tc: '#1E2D5A' },
+  { bg: '#1A2744', lt: '#EEF2FF', tc: '#1E2D5A' }
 ];
 
 /* ─────────────────────────────────────────────────────────────────
@@ -140,7 +156,7 @@ const s = obj => ({ style: obj });
    REUSABLE UI COMPONENTS
    ───────────────────────────────────────────────────────────────── */
 function renderHeader(sub) {
-  return h('div', s({background:'linear-gradient(135deg, #0F2D5E 0%, #1A3A7A 100%)', padding:'16px 20px 18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,255,255,0.08)'}),
+  return h('div', s({background:'linear-gradient(135deg, #1A2744 0%, #1E2D5A 100%)', padding:'16px 20px 18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,255,255,0.08)'}),
     h('div', s({display:'flex', alignItems:'center', gap:10}),
       h('div', s({width:40, height:40, borderRadius:20, background:B.blue, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}),
         h('span', s({color:'white', fontSize:22, fontWeight:700, lineHeight:'1'}), '+')
@@ -530,7 +546,7 @@ function renderLoading() {
     height: 56,
     borderRadius: '50%',
     border: '4px solid rgba(255,255,255,0.12)',
-    borderTopColor: '#3B82F6',
+    borderTopColor: '#3B6FE8',
     marginBottom: 28,
     flexShrink: 0
   }));
@@ -751,7 +767,7 @@ function renderPlan() {
   const two = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14}));
   [
     [p.red_flags||[], 'Red flags', B.red, '#7F1D1D', '#FEE2E2', '#FECACA', '▸'],
-    [p.home_advice||[], 'Home advice', B.green, '#14532D', '#F0FDF4', '#BBF7D0', '✓']
+    [p.home_advice||[], 'Home advice', B.blue, '#1E2D5A', '#EEF2FF', '#DBEAFE', '✓']
   ].forEach(([items, label, hc, tc, bg, bc, icon]) => {
     const box = h('div', s({background:bg, borderRadius:10, padding:12, border:`1px solid ${bc}`}));
     box.appendChild(h('div', s({fontSize:11, fontWeight:600, color:hc, textTransform:'uppercase', letterSpacing:'0.7px', marginBottom:7}), label));
