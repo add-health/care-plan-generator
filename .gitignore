@@ -21,6 +21,12 @@ __pycache__/
 *.pyd
 *.pdf
 
+# Temp PDF output (Drive upload staging)
+temp/
+
+# Google service account key — never commit
+credentials.json
+
 # Editor
 .vscode/
 .idea/

@@ -2,6 +2,7 @@ const express = require('express');
 const fetch   = require('node-fetch');
 const cors    = require('cors');
 const path    = require('path');
+const { PythonShell } = require('python-shell');
 
 const app = express();
 app.use(express.json({ limit: '1mb' }));
@@ -46,6 +47,81 @@ app.post('/generate-plan', async (req, res) => {
   } catch (err) {
     console.error('Server error:', err);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// ── Google Drive PDF upload ─────────────────────────────────────────
+app.post('/save-pdf', async (req, res) => {
+  const { patient, plan } = req.body;
+
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const safeName = (patient.name || 'Patient').replace(/\s+/g, '_');
+  const safeCondition = (patient.condition || 'Plan').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+  const filename = `${safeName}_${safeCondition}_${timestamp}.pdf`;
+  const outputPath = path.join(__dirname, '..', 'temp', filename);
+
+  const fs = require('fs');
+  if (!fs.existsSync(path.join(__dirname, '..', 'temp'))) {
+    fs.mkdirSync(path.join(__dirname, '..', 'temp'));
+  }
+
+  try {
+    // Step 1: Generate PDF via Python
+    await new Promise((resolve, reject) => {
+      PythonShell.run(
+        path.join(__dirname, '..', 'pdf-generator', 'generate_pdf.py'),
+        {
+          args: ['--json', JSON.stringify({ patient, plan, output: outputPath })],
+          pythonPath: 'python3'
+        },
+        (err) => err ? reject(err) : resolve()
+      );
+    });
+
+    // Step 2: Upload to Google Drive
+    const { google } = require('googleapis');
+    const auth = new google.auth.GoogleAuth({
+      keyFile: path.join(__dirname, '..', 'credentials.json'),
+      scopes: ['https://www.googleapis.com/auth/drive.file']
+    });
+    const drive = google.drive({ version: 'v3', auth });
+
+    const fileStream = fs.createReadStream(outputPath);
+    const uploaded = await drive.files.create({
+      requestBody: {
+        name: filename,
+        mimeType: 'application/pdf',
+        parents: [process.env.GOOGLE_DRIVE_FOLDER_ID]
+      },
+      media: {
+        mimeType: 'application/pdf',
+        body: fileStream
+      },
+      fields: 'id, webViewLink'
+    });
+
+    // Step 3: Make file readable by anyone with link
+    await drive.permissions.create({
+      fileId: uploaded.data.id,
+      requestBody: {
+        role: 'reader',
+        type: 'anyone'
+      }
+    });
+
+    // Step 4: Clean up temp file
+    fs.unlinkSync(outputPath);
+
+    res.json({
+      success: true,
+      filename,
+      driveLink: uploaded.data.webViewLink,
+      fileId: uploaded.data.id
+    });
+
+  } catch (err) {
+    console.error('PDF save error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
