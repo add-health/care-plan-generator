@@ -68,14 +68,15 @@ app.post('/save-pdf', async (req, res) => {
   try {
     // Step 1: Generate PDF via Python
     await new Promise((resolve, reject) => {
-      PythonShell.run(
+      const shell = new PythonShell(
         path.join(__dirname, '..', 'pdf-generator', 'generate_pdf.py'),
         {
           args: ['--json', JSON.stringify({ patient, plan, output: outputPath })],
-          pythonPath: 'python3'
-        },
-        (err) => err ? reject(err) : resolve()
+          pythonPath: process.env.PYTHON_PATH || 'python3'
+        }
       );
+      shell.on('error', reject);
+      shell.end((err) => err ? reject(err) : resolve());
     });
 
     // Step 2: Upload to Google Drive
