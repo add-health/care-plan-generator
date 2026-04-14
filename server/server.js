@@ -97,6 +97,8 @@ app.post('/save-pdf', async (req, res) => {
     const auth = new google.auth.GoogleAuth(authConfig);
     const drive = google.drive({ version: 'v3', auth });
 
+    console.log('Drive folder ID:', process.env.GOOGLE_DRIVE_FOLDER_ID);
+
     const fileStream = fs.createReadStream(outputPath);
     const uploaded = await drive.files.create({
       requestBody: {
