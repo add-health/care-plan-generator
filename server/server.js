@@ -85,10 +85,16 @@ app.post('/save-pdf', async (req, res) => {
 
     // Step 2: Upload to Google Drive
     const { google } = require('googleapis');
-    const auth = new google.auth.GoogleAuth({
-      keyFile: path.join(__dirname, '..', 'credentials.json'),
-      scopes: ['https://www.googleapis.com/auth/drive.file']
-    });
+    let authConfig;
+    if (process.env.GOOGLE_CREDENTIALS_JSON) {
+      const creds = JSON.parse(
+        Buffer.from(process.env.GOOGLE_CREDENTIALS_JSON, 'base64').toString()
+      );
+      authConfig = { credentials: creds, scopes: ['https://www.googleapis.com/auth/drive.file'] };
+    } else {
+      authConfig = { keyFile: path.join(__dirname, '..', 'credentials.json'), scopes: ['https://www.googleapis.com/auth/drive.file'] };
+    }
+    const auth = new google.auth.GoogleAuth(authConfig);
     const drive = google.drive({ version: 'v3', auth });
 
     const fileStream = fs.createReadStream(outputPath);
