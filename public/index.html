@@ -203,7 +203,7 @@ function renderChips(options, selected, toggle, label) {
       background:sel?B.blueLt:'white', color:sel?B.navy:B.muted,
       fontSize:13, fontWeight:sel?600:400, cursor:'pointer'
     }}, o);
-    chip.addEventListener('click', () => toggle(o));
+    chip.addEventListener('click', () => { toggle(o); render(); });
     chips.appendChild(chip);
   });
   wrap.appendChild(chips);
@@ -308,9 +308,7 @@ function renderStep1() {
   }
   diagW.appendChild(renderSelect(f.condition, v => {
     upd('condition', v);
-    const proto = PROTOCOLS.find(p => p.condition === v);
-    hint.style.display = v ? 'block' : 'none';
-    if (proto) hint.textContent = proto.overview;
+    render();
   }, PROTOCOLS.map(p => p.condition)));
   diagW.appendChild(hint);
   sec.appendChild(diagW);
