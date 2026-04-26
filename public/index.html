@@ -70,6 +70,106 @@ const PROTOCOLS = [
 ];
 
 /* ─────────────────────────────────────────────────────────────────
+   PACKAGES & PRICING
+   ───────────────────────────────────────────────────────────────── */
+const CONDITION_TO_PACKAGE = {
+  'Total Knee Replacement':                     'orthopaedic',
+  'Hip Replacement':                            'orthopaedic',
+  'ACL Reconstruction / Knee Ligament Injury':  'orthopaedic',
+  'Rotator Cuff Tear (post-repair)':            'orthopaedic',
+  'Shoulder Surgery (other)':                   'orthopaedic',
+  'Fracture (after cast/surgery)':              'orthopaedic',
+  'Spinal Surgery':                             'orthopaedic',
+  'Plantar Fasciitis':                          'orthopaedic',
+  'Tendinopathy (achilles/tennis elbow)':       'orthopaedic',
+  'Low Back Pain':                              'orthopaedic',
+  'Osteoarthritis (Knee/Hip)':                  'orthopaedic',
+  'Neck Pain':                                  'orthopaedic',
+  'Frozen Shoulder (Adhesive Capsulitis)':      'orthopaedic',
+  "Erb's Palsy (Brachial Plexus Birth Injury)": 'orthopaedic',
+  'Carpal Tunnel Syndrome':                     'orthopaedic',
+  'Ankle Sprain':                               'orthopaedic',
+  "Parkinson's Disease":                        'neurological',
+  'Stroke Rehabilitation':                      'neurological',
+  'Muscular Dystrophy':                         'neurological',
+  'Multiple Sclerosis':                         'neurological',
+  'Cerebral Palsy':                             'neurological',
+  "Bell's Palsy":                               'neurological',
+  'Postnatal Physiotherapy':                    'prenatal_postnatal',
+  'Prenatal Physiotherapy':                     'prenatal_postnatal'
+};
+
+const PACKAGES = {
+  orthopaedic: {
+    label: 'Orthopaedic Physiotherapy Plan',
+    tiers: [
+      { sessions: 7,  price: 6930  },
+      { sessions: 14, price: 13160 },
+      { sessions: 28, price: 24920 }
+    ]
+  },
+  neurological: {
+    label: 'Neurological Physiotherapy Plan',
+    tiers: [
+      { sessions: 7,  price: 6930  },
+      { sessions: 14, price: 13160 },
+      { sessions: 28, price: 24920 }
+    ]
+  },
+  senior_citizen: {
+    label: 'Senior Citizen Physiotherapy Plan',
+    tiers: [
+      { sessions: 7,  price: 6230  },
+      { sessions: 14, price: 11760 },
+      { sessions: 28, price: 22120 }
+    ]
+  },
+  cardiac: {
+    label: 'Cardiac Physiotherapy Plan',
+    tiers: [
+      { sessions: 7,  price: 6230  },
+      { sessions: 14, price: 11760 },
+      { sessions: 28, price: 22120 }
+    ]
+  },
+  prenatal_postnatal: {
+    label: 'Prenatal & Postnatal Physiotherapy Plan',
+    tiers: [
+      { sessions: 7,  price: 6230  },
+      { sessions: 14, price: 11760 },
+      { sessions: 28, price: 22120 }
+    ]
+  }
+};
+
+function getRecommendedPackage(condition, chronicity, durationWeeks, age) {
+  const packageKey = CONDITION_TO_PACKAGE[condition] || 'orthopaedic';
+
+  let finalKey = packageKey;
+  if (parseInt(age) >= 65 && packageKey === 'orthopaedic') {
+    finalKey = 'senior_citizen';
+  }
+
+  const pkg = PACKAGES[finalKey];
+
+  // Recommend tier based on chronicity
+  let recommendedSessions;
+  if (chronicity === 'Acute (< 6 weeks)')          recommendedSessions = 7;
+  else if (chronicity === 'Subacute (6–12 weeks)')  recommendedSessions = 14;
+  else                                              recommendedSessions = 28;
+
+  // Neurological always starts at 14 minimum
+  if (finalKey === 'neurological' && recommendedSessions < 14) {
+    recommendedSessions = 14;
+  }
+
+  const tier = pkg.tiers.find(t => t.sessions === recommendedSessions)
+    || pkg.tiers[1]; // fallback to 14 sessions
+
+  return { pkg, finalKey, tier };
+}
+
+/* ─────────────────────────────────────────────────────────────────
    CONSTANTS
    ───────────────────────────────────────────────────────────────── */
 const B = {
