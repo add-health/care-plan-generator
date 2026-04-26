@@ -173,25 +173,20 @@ function getRecommendedPackage(condition, chronicity, durationWeeks, age) {
    CONSTANTS
    ───────────────────────────────────────────────────────────────── */
 const B = {
-  navy:    '#1A2744',
-  navy2:   '#1E2D5A',
-  blue:    '#3B6FE8',
-  blue2:   '#2563EB',
-  blueLt:  '#EEF2FF',
-  blueLt2: '#DBEAFE',
-  teal:    '#3B6FE8',
-  tealLt:  '#EEF2FF',
-  purple:  '#2563EB',
-  purpLt:  '#DBEAFE',
+  navy:    '#1A2744',     // primary brand navy
+  navy2:   '#1E2D5A',     // secondary navy
+  navy3:   '#0F1E3D',     // darker navy for gradients
+  blue:    '#3B6FE8',     // primary brand blue
+  blue2:   '#2563EB',     // accent blue
+  blueLt:  '#EEF2FF',     // light blue surface
+  blueLt2: '#DBEAFE',     // lighter blue surface
   red:     '#DC2626',
   redLt:   '#FEE2E2',
-  green:   '#2563EB',
-  greenLt: '#EEF2FF',
   amber:   '#D97706',
-  bg:      '#F4F6FF',
-  text:    '#1A2744',
+  bg:      '#F4F6FF',     // page background — pale brand-tinted
+  text:    '#1A2744',     // body text uses brand navy
   muted:   '#64748B',
-  border:  '#DBEAFE',
+  border:  '#DBEAFE',     // borders tinted with brand blue
   white:   '#FFFFFF'
 };
 
@@ -257,14 +252,9 @@ const s = obj => ({ style: obj });
    ───────────────────────────────────────────────────────────────── */
 function renderHeader(sub) {
   return h('div', s({background:'linear-gradient(135deg, #1A2744 0%, #1E2D5A 100%)', padding:'16px 20px 18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,255,255,0.08)'}),
-    h('div', s({display:'flex', alignItems:'center', gap:10}),
-      h('div', s({width:40, height:40, borderRadius:20, background:B.blue, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0}),
-        h('span', s({color:'white', fontSize:22, fontWeight:700, lineHeight:'1'}), '+')
-      ),
-      h('div', null,
-        h('div', s({color:'white', fontSize:16, fontWeight:700, letterSpacing:'0.2px'}), 'Lifetime Health'),
-        sub ? h('div', s({color:'#7DB8F7', fontSize:13, marginTop:3}), sub) : null
-      )
+    h('div', null,
+      h('div', s({color:'white', fontSize:16, fontWeight:700, letterSpacing:'0.2px'}), 'Lifetime Health'),
+      sub ? h('div', s({color:'#7DB8F7', fontSize:13, marginTop:3}), sub) : null
     ),
     sub ? h('div', s({background:'rgba(255,255,255,0.1)', color:'#93C5FD', fontSize:10, fontWeight:600, padding:'4px 10px', borderRadius:20, letterSpacing:'0.8px'}), 'BETA') : null
   );
@@ -278,14 +268,14 @@ function renderStepBar() {
     const done = i < cur, active = i === cur;
     const circle = h('div', s({
       width:26, height:26, borderRadius:13, flexShrink:0,
-      background: done?B.teal : active?B.blue : B.border,
+      background: done?B.blue : active?B.blue : B.border,
       color: done||active ? 'white' : B.muted,
       fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center'
     }), done ? '✓' : String(i+1));
-    const lbl = h('span', s({fontSize:12, fontWeight:active?600:400, color:active?B.navy:B.muted, marginLeft:5}), name);
+    const lbl = h('span', s({fontSize:12, fontWeight:active?600:400, color:active?B.navy:B.muted, marginLeft:10}), name);
     bar.appendChild(h('div', s({display:'flex', alignItems:'center', flexShrink:0}), circle, lbl));
     if (i < steps.length - 1) {
-      bar.appendChild(h('div', s({flex:1, height:1.5, background:done?B.teal:B.border, margin:'0 10px'})));
+      bar.appendChild(h('div', s({flex:1, height:1.5, background:done?B.blue:B.border, margin:'0 10px'})));
     }
   });
   return bar;
@@ -382,7 +372,7 @@ function renderRadio(options, selected, onChange, label) {
 
 function renderPainSlider() {
   const v = state.form.painScore;
-  const painColor = v <= 3 ? B.green : v <= 6 ? B.amber : B.red;
+  const painColor = v <= 3 ? B.blue : v <= 6 ? B.amber : B.red;
   const wrap = h('div', s({marginBottom:24}));
   wrap.appendChild(renderLabel('Pain score (NRS 0–10)', true));
   const row = h('div', s({display:'flex', alignItems:'center', gap:12}));
@@ -396,7 +386,7 @@ function renderPainSlider() {
     const nv = parseInt(e.target.value);
     state.form.painScore = nv;
     badge.textContent = String(nv);
-    badge.style.background = nv <= 3 ? B.green : nv <= 6 ? B.amber : B.red;
+    badge.style.background = nv <= 3 ? B.blue : nv <= 6 ? B.amber : B.red;
   });
   row.appendChild(slider); row.appendChild(badge);
   wrap.appendChild(row);
@@ -850,9 +840,9 @@ function renderPlan() {
   wrap.appendChild(hero);
 
   // Stat pills
-  const painC = f.painScore >= 7 ? B.red : f.painScore >= 4 ? B.amber : B.green;
+  const painC = f.painScore >= 7 ? B.red : f.painScore >= 4 ? B.amber : B.blue;
   const stats = h('div', s({background:'white', padding:'10px 16px', display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:8, borderBottom:`1px solid ${B.border}`}));
-  [{label:'Pain',val:`${f.painScore}/10`,c:painC},{label:'Duration',val:`${p.duration_weeks}w`,c:B.blue},{label:'Package',val:p.package||f.condition.split(' ')[0],c:B.teal}].forEach(({label,val,c}) => {
+  [{label:'Pain',val:`${f.painScore}/10`,c:painC},{label:'Duration',val:`${p.duration_weeks}w`,c:B.blue},{label:'Package',val:p.package||f.condition.split(' ')[0],c:B.blue}].forEach(({label,val,c}) => {
     stats.appendChild(h('div', s({textAlign:'center', padding:'8px 4px', borderRadius:8, background:B.bg}),
       h('div', s({fontSize:11, color:B.muted, marginBottom:2}), label),
       h('div', s({fontSize:15, fontWeight:700, color:c}), val)
@@ -879,7 +869,7 @@ function renderPlan() {
     gg.appendChild(col);
   });
   goals.appendChild(gg);
-  const vp = h('div', s({padding:'8px 12px', borderRadius:8, background:B.tealLt, fontSize:13, color:'#0A3D38'}));
+  const vp = h('div', s({padding:'8px 12px', borderRadius:8, background:B.blueLt, fontSize:13, color:'#0A3D38'}));
   vp.appendChild(h('strong', null, 'Visit plan: '));
   vp.appendChild(document.createTextNode(p.visit_frequency || ''));
   goals.appendChild(vp);
@@ -930,7 +920,7 @@ function renderPlan() {
     const row = h('div', s({display:'grid', gridTemplateColumns:'2fr 1fr 1fr', gap:8, padding:'7px 0', borderBottom:i<p.metrics.length-1?`1px solid ${B.border}`:'none', alignItems:'center'}));
     row.appendChild(h('div', s({fontSize:13, fontWeight:500, color:B.text}), m.name));
     row.appendChild(h('div', s({fontSize:12, fontWeight:600, color:B.amber}), m.baseline));
-    row.appendChild(h('div', s({fontSize:12, fontWeight:600, color:B.green}), m.target));
+    row.appendChild(h('div', s({fontSize:12, fontWeight:600, color:B.blue}), m.target));
     mt.appendChild(row);
   });
   body.appendChild(mt);
@@ -1170,7 +1160,7 @@ function renderPlan() {
   const btn2 = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.blue, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, 'Edit & regenerate');
   btn2.addEventListener('click', () => { state.screen = 'form'; state.step = 0; render(); });
   row1.appendChild(btn1); row1.appendChild(btn3); row1.appendChild(btn2);
-  const btnPdf = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.teal, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, '⬇ Download PDF');
+  const btnPdf = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.blue, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, '⬇ Download PDF');
   btnPdf.addEventListener('click', async () => {
     btnPdf.textContent = 'Generating...';
     btnPdf.style.opacity = '0.7';
@@ -1251,7 +1241,7 @@ function renderForm() {
 
   const fwd = h('button', {type:'button', id:'nav-fwd', style:{
     flex:'2', padding:'13px 0', borderRadius:10, border:'none',
-    background: canNext ? (isLast ? B.teal : B.blue) : B.border,
+    background: canNext ? (isLast ? B.blue : B.blue) : B.border,
     color: canNext ? 'white' : B.muted,
     fontSize:15, fontWeight:600, cursor: canNext ? 'pointer' : 'default'
   }}, isLast ? 'Generate plan →' : 'Next →');
