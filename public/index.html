@@ -459,7 +459,18 @@ Required JSON schema:
   ],
   "red_flags": ["specific warning sign 1", "warning 2", "warning 3", "warning 4", "warning 5"],
   "home_advice": ["specific advice 1", "advice 2", "advice 3", "advice 4", "advice 5"],
-  "package": "package name from protocol"
+  "package": "package name from protocol",
+  "followup": {
+    "reassessment_date": "Week X — DD Mon YYYY (calculated from today's date + phase duration)",
+    "maintenance_frequency": "e.g. 1x per month after discharge",
+    "contact_criteria": [
+      "specific symptom or situation 1",
+      "specific symptom or situation 2",
+      "specific symptom or situation 3",
+      "specific symptom or situation 4"
+    ],
+    "escalation_pathway": "Attending physio → Lifetime Health clinical team"
+  }
 }
 
 Clinical rules — apply ALL that match the patient profile:
@@ -470,7 +481,11 @@ Clinical rules — apply ALL that match the patient profile:
 - High pain (7+/10): Phase 1 must be conservative — isometric only, no loaded movement
 - Chronic (>12 weeks): extend duration_weeks; add pain neuroscience education to home_advice
 - Neurological conditions: add caregiver education to home_advice; include GCS monitoring note for stroke
-- Short conditions (ankle sprain, Bell's palsy): 2 phases maximum`;
+- Short conditions (ankle sprain, Bell's palsy): 2 phases maximum
+- followup.reassessment_date: calculate as a real calendar date based on today's date plus the total phase duration. Format as 'Week X — DD Mon YYYY'. Today's date is provided in the user message.
+- followup.maintenance_frequency: for acute conditions use '1x per month for 3 months after discharge'. For chronic use 'once every 6 weeks ongoing'. For neurological use '2x per month ongoing — condition is lifelong'.
+- followup.contact_criteria: always include 4 items specific to the condition and comorbidities. For diabetic patients include blood glucose spike and wound changes. For elderly (65+) include fall as first item. For neurological include sudden weakness or speech change.
+- followup.escalation_pathway: always exactly 'Attending physio → Lifetime Health clinical team'. Never mention any individual name.`;
 
   const userMessage = `PROTOCOL TEMPLATE:
 ${JSON.stringify(proto, null, 2)}
@@ -489,6 +504,7 @@ Comorbidities: ${f.comorbidities.length ? f.comorbidities.join(', ') : 'None'}
 Neurological Symptoms: ${f.neuro.length ? f.neuro.join(', ') : 'None'}
 Patient Goals: ${f.goals || 'return to normal daily activities'}
 Clinician Notes: ${f.notes || 'none'}
+Today's date: ${new Date().toLocaleDateString('en-GB', {day:'numeric', month:'long', year:'numeric'})}
 
 Generate treatment plan as JSON:`;
 
@@ -762,6 +778,163 @@ function renderPlan() {
     mt.appendChild(row);
   });
   body.appendChild(mt);
+
+  // Follow-up & continuity
+  const fu = p.followup;
+  if (fu) {
+    const block = h('div', s({
+      background: 'white',
+      borderRadius: 10,
+      padding: 14,
+      marginBottom: 12,
+      borderLeft: '4px solid ' + B.blue,
+      border: '1.5px solid ' + B.blue
+    }));
+
+    // Title row
+    const titleRow = h('div', s({
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 12
+    }));
+    titleRow.appendChild(h('div', s({
+      fontSize: 11,
+      fontWeight: 600,
+      color: B.blue,
+      textTransform: 'uppercase',
+      letterSpacing: '0.8px'
+    }), 'Follow-up & continuity'));
+    titleRow.appendChild(h('div', s({
+      fontSize: 11,
+      fontWeight: 500,
+      color: B.muted,
+      background: B.bg,
+      padding: '3px 8px',
+      borderRadius: 20,
+      border: '1px solid ' + B.border
+    }), 'AI-generated'));
+    block.appendChild(titleRow);
+
+    // Disclaimer banner
+    const disclaimer = h('div', s({
+      display: 'flex',
+      alignItems: 'flex-start',
+      gap: 8,
+      padding: '9px 12px',
+      borderRadius: 8,
+      background: '#FFF7ED',
+      border: '1px solid #FED7AA',
+      marginBottom: 14
+    }));
+    disclaimer.appendChild(h('span', s({
+      fontSize: 16,
+      flexShrink: 0,
+      marginTop: 1
+    }), '⚠'));
+    const disclaimerText = h('div', s({
+      fontSize: 12,
+      color: '#92400E',
+      lineHeight: '1.5'
+    }));
+    disclaimerText.appendChild(h('strong', null, 'AI-generated suggestion. '));
+    disclaimerText.appendChild(document.createTextNode(
+      'Confirm dates and criteria with your supervising ' +
+      'physiotherapist or '));
+    const consultLink = h('a', {
+      href: 'https://lth.doctor/consultation',
+      target: '_blank',
+      style: {
+        color: '#92400E',
+        fontWeight: '600',
+        textDecoration: 'underline'
+      }
+    }, 'book a free expert consultation');
+    disclaimerText.appendChild(consultLink);
+    disclaimer.appendChild(disclaimerText);
+    block.appendChild(disclaimer);
+
+    // Two stat cards — reassessment + maintenance
+    const grid = h('div', s({
+      display: 'grid',
+      gridTemplateColumns: '1fr 1fr',
+      gap: 10,
+      marginBottom: 14
+    }));
+    [
+      ['Next reassessment', fu.reassessment_date],
+      ['Maintenance visits', fu.maintenance_frequency]
+    ].forEach(([label, value]) => {
+      const card = h('div', s({
+        background: B.blueLt,
+        borderRadius: 8,
+        padding: '10px 12px'
+      }));
+      card.appendChild(h('div', s({
+        fontSize: 11,
+        color: B.muted,
+        fontWeight: 600,
+        marginBottom: 5
+      }), label));
+      card.appendChild(h('div', s({
+        fontSize: 13,
+        fontWeight: 700,
+        color: B.navy,
+        lineHeight: '1.4'
+      }), value || '—'));
+      grid.appendChild(card);
+    });
+    block.appendChild(grid);
+
+    // Contact criteria
+    block.appendChild(h('div', s({
+      fontSize: 12,
+      fontWeight: 600,
+      color: B.navy,
+      marginBottom: 8
+    }), 'Call your therapist if:'));
+    const criteriaWrap = h('div', s({ marginBottom: 14 }));
+    (fu.contact_criteria || []).forEach((item, i) => {
+      criteriaWrap.appendChild(h('div', s({
+        fontSize: 13,
+        color: B.text,
+        padding: '5px 0',
+        borderBottom: '1px solid ' + B.border,
+        lineHeight: '1.4',
+        display: 'flex',
+        alignItems: 'flex-start',
+        gap: 8
+      }),
+        h('span', s({
+          color: B.blue,
+          fontWeight: 700,
+          flexShrink: 0,
+          fontSize: 14
+        }), '·'),
+        item
+      ));
+    });
+    block.appendChild(criteriaWrap);
+
+    // Escalation pathway
+    block.appendChild(h('div', s({
+      fontSize: 12,
+      fontWeight: 600,
+      color: B.navy,
+      marginBottom: 6
+    }), 'Escalation pathway:'));
+    block.appendChild(h('div', s({
+      fontSize: 13,
+      color: B.navy,
+      fontWeight: 500,
+      padding: '8px 12px',
+      background: B.blueLt,
+      borderRadius: 8
+    }), fu.escalation_pathway ||
+      'Attending physio → Lifetime Health clinical team'));
+
+    body.appendChild(block);
+  }
 
   // Red flags + home advice
   const two = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:14}));
