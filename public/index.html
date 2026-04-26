@@ -1065,7 +1065,15 @@ function renderPlan() {
       const res = await fetch('/save-pdf', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ patient: state.plan._form, plan: state.plan })
+        body: JSON.stringify({
+          patient: {
+            ...state.plan._form,
+            painScore:  state.plan._form.painScore,
+            pain_score: state.plan._form.painScore,
+            condition:  state.plan._form.condition
+          },
+          plan: state.plan
+        })
       });
       const data = await res.json();
       if (data.success) {
@@ -1110,7 +1118,12 @@ function renderPlan() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          patient: state.plan._form,
+          patient: {
+            ...state.plan._form,
+            painScore:  state.plan._form.painScore,
+            pain_score: state.plan._form.painScore,
+            condition:  state.plan._form.condition
+          },
           plan: state.plan
         })
       });

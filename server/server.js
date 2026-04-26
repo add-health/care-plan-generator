@@ -70,12 +70,24 @@ app.post('/save-pdf', async (req, res) => {
   }
 
   try {
+    const patientForPdf = {
+      name:       patient.name,
+      age:        patient.age,
+      gender:     patient.gender,
+      zone:       patient.zone,
+      condition:  patient.condition,
+      pain_score: parseInt(patient.painScore || patient.pain_score || 0),
+      date:       'Generated ' + new Date().toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                  })
+    };
+
     // Step 1: Generate PDF via Python
     await new Promise((resolve, reject) => {
       const shell = new PythonShell(
         path.join(__dirname, '..', 'pdf-generator', 'generate_pdf.py'),
         {
-          args: ['--json', JSON.stringify({ patient, plan, output: outputPath })],
+          args: ['--json', JSON.stringify({ patient: patientForPdf, plan, output: outputPath })],
           pythonPath: PYTHON_PATH
         }
       );
@@ -154,11 +166,23 @@ app.post('/download-pdf', async (req, res) => {
   const outputPath = path.join(tempDir, filename);
 
   try {
+    const patientForPdf = {
+      name:       patient.name,
+      age:        patient.age,
+      gender:     patient.gender,
+      zone:       patient.zone,
+      condition:  patient.condition,
+      pain_score: parseInt(patient.painScore || patient.pain_score || 0),
+      date:       'Generated ' + new Date().toLocaleDateString('en-GB', {
+                    day: 'numeric', month: 'short', year: 'numeric'
+                  })
+    };
+
     await new Promise((resolve, reject) => {
       const shell = new PythonShell(
         path.join(__dirname, '..', 'pdf-generator', 'generate_pdf.py'),
         {
-          args: ['--json', JSON.stringify({ patient, plan, output: outputPath })],
+          args: ['--json', JSON.stringify({ patient: patientForPdf, plan, output: outputPath })],
           pythonPath: PYTHON_PATH
         }
       );
