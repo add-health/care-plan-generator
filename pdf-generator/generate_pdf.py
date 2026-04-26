@@ -21,23 +21,23 @@ MR   = 15 * mm
 CW   = W - ML - MR
 
 C = dict(
-    navy1  = HexColor('#0D1F4E'),
-    navy2  = HexColor('#163270'),
-    blue   = HexColor('#2563EB'),
-    blue_l = HexColor('#DBEAFE'),
-    teal   = HexColor('#0BA399'),
-    teal_l = HexColor('#CCFBF1'),
-    purp   = HexColor('#7C3AED'),
-    green  = HexColor('#16A34A'),
-    green_l= HexColor('#DCFCE7'),
-    red    = HexColor('#DC2626'),
-    red_l  = HexColor('#FEE2E2'),
-    amber  = HexColor('#D97706'),
-    grey_l = HexColor('#F1F5F9'),
-    grey1  = HexColor('#1E293B'),
-    grey2  = HexColor('#475569'),
-    grey3  = HexColor('#94A3B8'),
-    line   = HexColor('#E2E8F0'),
+    navy1     = HexColor('#0A1838'),   # darkest header
+    navy2     = HexColor('#1A2744'),   # primary brand navy
+    navy3     = HexColor('#1E2D5A'),   # secondary navy
+    blue      = HexColor('#3B6FE8'),   # primary brand blue
+    blue2     = HexColor('#2563EB'),   # accent blue
+    blue_l    = HexColor('#EEF2FF'),   # light blue surface
+    blue_l2   = HexColor('#DBEAFE'),   # lighter blue surface
+    blue_pale = HexColor('#F4F6FF'),   # palest blue background
+    red       = HexColor('#DC2626'),
+    red_l     = HexColor('#FEE2E2'),
+    amber     = HexColor('#D97706'),
+    green     = HexColor('#16A34A'),
+    grey_l    = HexColor('#F4F6FF'),   # tinted with brand blue
+    grey1     = HexColor('#1A2744'),   # text = brand navy
+    grey2     = HexColor('#475569'),
+    grey3     = HexColor('#94A3B8'),
+    line      = HexColor('#DBEAFE'),
 )
 
 def col(name): return C[name]
@@ -70,8 +70,8 @@ def draw_footer(c, page_num):
          ML, 4*mm, size=6.5, color=col('grey3'))
     text(c, f'Page {page_num}', W-MR, 4*mm, size=6.5, color=col('grey3'), align='right')
 
-PHASE_COLOURS = [col('blue'), col('teal'), col('purp')]
-PHASE_LIGHT   = [col('blue_l'), col('teal_l'), HexColor('#EDE9FE')]
+PHASE_COLS  = [HexColor('#2563EB'), HexColor('#3B6FE8'), HexColor('#1A2744')]
+PHASE_LIGHT = [HexColor('#EEF2FF'), HexColor('#DBEAFE'), HexColor('#EEF2FF')]
 
 def generate_plan_pdf(patient, plan, output_path):
     c = rc.Canvas(output_path, pagesize=A4)
@@ -118,7 +118,7 @@ def generate_plan_pdf(patient, plan, output_path):
     stat_data = [
         ('PAIN SCORE', f"{pain_score}/10", '', col('grey_l'), pain_color),
         ('DURATION',   f"{plan.get('duration_weeks',8)}w", '', col('blue_l'), col('blue')),
-        ('PACKAGE',    plan.get('package','Orthopedic')[:12], '', col('teal_l'), col('teal')),
+        ('PACKAGE',    plan.get('package','Orthopedic')[:12], '', col('blue_l'), col('blue')),
     ]
     for i, (lbl, val, unit, bg, vc) in enumerate(stat_data):
         px = ML + i*(pw+2.5*mm)
@@ -155,7 +155,7 @@ def generate_plan_pdf(patient, plan, output_path):
     y -= imp_h + 4*mm
 
     # Goals section header
-    fill_rect(c, ML, y-sec_h, CW, sec_h, col('teal'), radius=2.5*mm)
+    fill_rect(c, ML, y-sec_h, CW, sec_h, col('blue'), radius=2.5*mm)
     text(c, '◎  GOALS & VISIT PLAN', ML+4*mm, y-sec_h+3.2*mm, 'Helvetica-Bold', 8.5, white)
     y -= sec_h + 3*mm
 
@@ -175,8 +175,8 @@ def generate_plan_pdf(patient, plan, output_path):
 
     # Visit frequency
     vf_h = 8*mm
-    fill_rect(c, ML, y-vf_h, CW, vf_h, col('teal_l'), radius=2*mm)
-    c.setFont('Helvetica-Bold', 7.5); c.setFillColor(col('teal'))
+    fill_rect(c, ML, y-vf_h, CW, vf_h, col('blue_l'), radius=2*mm)
+    c.setFont('Helvetica-Bold', 7.5); c.setFillColor(col('blue'))
     c.drawString(ML+4*mm, y-vf_h+2.5*mm, 'Visit plan:')
     c.setFont('Helvetica', 7.5); c.setFillColor(col('grey1'))
     c.drawString(ML+22*mm, y-vf_h+2.5*mm, plan.get('visit_frequency','')[:80])
@@ -228,7 +228,7 @@ def generate_plan_pdf(patient, plan, output_path):
     y -= sec_h + 3*mm
 
     for i, phase in enumerate(plan.get('phases',[])[:3]):
-        pc = PHASE_COLOURS[i] if i < len(PHASE_COLOURS) else PHASE_COLOURS[-1]
+        pc = PHASE_COLS[i] if i < len(PHASE_COLS) else PHASE_COLS[-1]
         pl = PHASE_LIGHT[i]   if i < len(PHASE_LIGHT)   else PHASE_LIGHT[-1]
         ex_count = len(phase.get('exercises',[]))
         card_h = 11*mm + 7*mm + ex_count*9.5*mm + 9*mm
@@ -291,7 +291,7 @@ def generate_plan_pdf(patient, plan, output_path):
 
     if y > 40*mm:
         fh1 = list_box(ML, y, half, '⚑  RED FLAGS', flags, 'DC2626', 'FEE2E2', '▸')
-        list_box(ML+half+5*mm, y, half, '✓  HOME ADVICE', advice, '0BA399', 'F0FDF4', '✓')
+        list_box(ML+half+5*mm, y, half, '✓  HOME ADVICE', advice, '3B6FE8', 'EEF2FF', '✓')
         y -= max(fh1, 0) + 4*mm
 
     draw_footer(c, 2)

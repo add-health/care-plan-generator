@@ -140,6 +140,41 @@ app.post('/save-pdf', async (req, res) => {
   }
 });
 
+// ── PDF download (same Python generator, no Drive upload) ───────────
+app.post('/download-pdf', async (req, res) => {
+  const { patient, plan } = req.body;
+
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const safeName = (patient.name || 'Patient').replace(/\s+/g, '_');
+  const safeCondition = (patient.condition || 'Plan').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+  const filename = `${safeName}_${safeCondition}_${timestamp}.pdf`;
+
+  const tempDir = path.join(__dirname, '..', 'temp');
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+  const outputPath = path.join(tempDir, filename);
+
+  try {
+    await new Promise((resolve, reject) => {
+      const shell = new PythonShell(
+        path.join(__dirname, '..', 'pdf-generator', 'generate_pdf.py'),
+        {
+          args: ['--json', JSON.stringify({ patient, plan, output: outputPath })],
+          pythonPath: PYTHON_PATH
+        }
+      );
+      shell.on('error', reject);
+      shell.end((err) => err ? reject(err) : resolve());
+    });
+
+    res.download(outputPath, filename, (err) => {
+      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    });
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Serve frontend ──────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('*', (req, res) => {

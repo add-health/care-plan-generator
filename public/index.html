@@ -1101,12 +1101,37 @@ function renderPlan() {
   const btn2 = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.blue, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, 'Edit & regenerate');
   btn2.addEventListener('click', () => { state.screen = 'form'; state.step = 0; render(); });
   row1.appendChild(btn1); row1.appendChild(btn3); row1.appendChild(btn2);
-  const btnPdf = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.teal, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, '⬇ Save as PDF');
-  btnPdf.addEventListener('click', () => {
-    const title = document.title;
-    document.title = `Care Plan — ${f.name || 'Patient'} — ${f.condition}`;
-    window.print();
-    document.title = title;
+  const btnPdf = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.teal, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, '⬇ Download PDF');
+  btnPdf.addEventListener('click', async () => {
+    btnPdf.textContent = 'Generating...';
+    btnPdf.style.opacity = '0.7';
+    try {
+      const res = await fetch('/download-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient: state.plan._form,
+          plan: state.plan
+        })
+      });
+      if (!res.ok) throw new Error('Generation failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const name = (state.plan._form.name || 'Patient').replace(/\s+/g, '_');
+      const cond = (state.plan._form.condition || 'Plan').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+      const date = new Date().toISOString().slice(0, 10);
+      a.download = `${name}_${cond}_${date}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      btnPdf.textContent = '✓ Downloaded';
+      setTimeout(() => { btnPdf.textContent = '⬇ Download PDF'; btnPdf.style.opacity = '1'; }, 2000);
+    } catch (err) {
+      btnPdf.textContent = '✗ Failed';
+      btnPdf.style.background = '#DC2626';
+      setTimeout(() => { btnPdf.textContent = '⬇ Download PDF'; btnPdf.style.background = ''; }, 3000);
+    }
   });
   const row2 = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}));
   const btnWa = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:'#25D366', color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, '💬 WhatsApp');
