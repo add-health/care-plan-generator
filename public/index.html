@@ -772,22 +772,21 @@ function renderLoading() {
     fontWeight: 500,
     lineHeight: '1.5',
     textAlign: 'left'
-  }), 'Please do not close this window. Generation takes 10–15 seconds.'));
+  }), 'Please do not close this window. Generation takes 20–30 seconds.'));
   inner.appendChild(disclaimer);
 
   wrap.appendChild(inner);
 
-  // Lifetime Health watermark at bottom
+  // Watermark — in normal flow, pushed to bottom via marginTop auto on inner
+  inner.style.marginBottom = '0';
   wrap.appendChild(h('div', s({
-    position: 'absolute',
-    bottom: 24,
-    left: 0,
-    right: 0,
-    textAlign: 'center',
+    marginTop: 'auto',
+    paddingTop: 40,
     color: 'rgba(147,197,253,0.4)',
     fontSize: 11,
     fontWeight: 500,
-    letterSpacing: '0.5px'
+    letterSpacing: '0.5px',
+    textAlign: 'center'
   }), 'Lifetime Health  ·  lifetimehealth.in'));
 
   return wrap;
