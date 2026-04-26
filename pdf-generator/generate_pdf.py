@@ -97,6 +97,10 @@ def draw_footer(c, page_num):
 PHASE_COLS  = [HexColor('#2563EB'), HexColor('#3B6FE8'), HexColor('#1A2744')]
 PHASE_LIGHT = [HexColor('#EEF2FF'), HexColor('#DBEAFE'), HexColor('#EEF2FF')]
 
+# Logo asset — 1557 × 611 px, aspect ratio ≈ 2.55 : 1
+LOGO_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets', 'logo.png')
+LOGO_ASPECT = 611 / 1557   # height / width
+
 
 def generate_plan_pdf(patient, plan, output_path):
     c = rc.Canvas(output_path, pagesize=A4)
@@ -116,12 +120,13 @@ def generate_plan_pdf(patient, plan, output_path):
     # ── Page helpers ─────────────────────────────────────────────────
     def draw_mini_header():
         gradient(c, 0, H-HDR2, W, HDR2, col('navy1'), col('navy2'))
-        lx2 = ML + 6*mm; ly2 = H - 9.5*mm
-        fill_rect(c, lx2-5*mm, ly2-5*mm, 10*mm, 10*mm, col('blue'), radius=5*mm)
-        c.setStrokeColor(white); c.setLineWidth(1.5)
-        c.line(lx2, ly2-3*mm, lx2, ly2+3*mm); c.line(lx2-3*mm, ly2, lx2+3*mm, ly2)
-        text(c, 'Lifetime Health', ML+14*mm, H-8.5*mm, 'Helvetica-Bold', 10, white)
-        text(c, f'Treatment Plan — {name}', ML+14*mm, H-15*mm, size=7.5, color=col('grey3'))
+        mini_logo_w = 28 * mm
+        mini_logo_h = mini_logo_w * LOGO_ASPECT
+        logo_y = H - HDR2/2 - mini_logo_h/2   # vertically centred in mini-header
+        if os.path.exists(LOGO_PATH):
+            c.drawImage(LOGO_PATH, ML, logo_y, width=mini_logo_w, height=mini_logo_h, mask='auto')
+        text(c, f'Treatment Plan — {name}',
+             ML + mini_logo_w + 5*mm, H - HDR2/2 - 3, size=7.5, color=col('grey3'))
 
     def new_page():
         draw_footer(c, page_num[0])
@@ -139,14 +144,13 @@ def generate_plan_pdf(patient, plan, output_path):
     HDR = 63 * mm
     gradient(c, 0, H-HDR, W, HDR, col('navy1'), col('navy2'))
 
-    # Logo mark
-    lx, ly = ML + 9*mm, H - 22*mm
-    fill_rect(c, lx-9*mm, ly-9*mm, 18*mm, 18*mm, col('blue'), radius=9*mm)
-    c.setStrokeColor(white); c.setLineWidth(2.2)
-    c.line(lx, ly-5*mm, lx, ly+5*mm); c.line(lx-5*mm, ly, lx+5*mm, ly)
-
-    text(c, 'Lifetime Health', ML+21*mm, H-18.5*mm, 'Helvetica-Bold', 16, white)
-    text(c, 'Home Healthcare Platform  ·  Bangalore', ML+21*mm, H-26*mm, size=8, color=col('grey3'))
+    # Logo image
+    logo_w = 50 * mm
+    logo_h = logo_w * LOGO_ASPECT
+    if os.path.exists(LOGO_PATH):
+        c.drawImage(LOGO_PATH, ML, H - 12*mm - logo_h, width=logo_w, height=logo_h, mask='auto')
+    text(c, 'Home Healthcare Platform  ·  Bangalore',
+         ML, H - 14*mm - logo_h, size=8, color=col('grey3'))
 
     # Treatment Plan badge
     bw = 50 * mm
