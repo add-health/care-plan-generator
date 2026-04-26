@@ -801,11 +801,6 @@ function renderPlan() {
 
   const body = h('div', s({padding:'12px 16px'}));
 
-  // Prototype notice
-  body.appendChild(h('div', s({marginBottom:12, padding:'10px 12px', borderRadius:8, background:'#FFF7ED', border:'1px solid #FED7AA', fontSize:12, color:'#92400E', lineHeight:'1.5'}),
-    'Beta — AI-generated plan based on Lifetime Health protocol templates. Review before sharing with patient.'
-  ));
-
   // Clinical impression
   const imp = h('div', s({background:'white', borderRadius:10, padding:14, marginBottom:12, borderLeft:`4px solid ${B.blue}`}));
   imp.appendChild(h('div', s({fontSize:11, fontWeight:600, color:B.blue, textTransform:'uppercase', letterSpacing:'0.8px', marginBottom:6}), 'Clinical impression'));
