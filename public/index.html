@@ -547,6 +547,14 @@ Required JSON schema:
     {"name": "Condition-specific measure", "baseline": "assessed at first visit", "target": "clinically meaningful target", "frequency": "Every 7 visits"},
     {"name": "Functional outcome", "baseline": "current level", "target": "target level", "frequency": "Every 7 visits"}
   ],
+  "pain_trajectory": [
+    { "week": 0, "expected": 8, "milestone": "Baseline" },
+    { "week": 2, "expected": 6, "milestone": "End of Phase 1" },
+    { "week": 4, "expected": 4 },
+    { "week": 6, "expected": 3, "milestone": "End of Phase 2" },
+    { "week": 8, "expected": 2 },
+    { "week": 10, "expected": 2, "milestone": "Discharge target" }
+  ],
   "red_flags": ["specific warning sign 1", "warning 2", "warning 3", "warning 4", "warning 5"],
   "home_advice": ["specific advice 1", "advice 2", "advice 3", "advice 4", "advice 5"],
   "package": "package name from protocol",
@@ -575,7 +583,17 @@ Clinical rules — apply ALL that match the patient profile:
 - followup.reassessment_date: calculate as a real calendar date based on today's date plus the total phase duration. Format as 'Week X — DD Mon YYYY'. Today's date is provided in the user message.
 - followup.maintenance_frequency: for acute conditions use '1x per month for 3 months after discharge'. For chronic use 'once every 6 weeks ongoing'. For neurological use '2x per month ongoing — condition is lifelong'.
 - followup.contact_criteria: always include 4 items specific to the condition and comorbidities. For diabetic patients include blood glucose spike and wound changes. For elderly (65+) include fall as first item. For neurological include sudden weakness or speech change.
-- followup.escalation_pathway: always exactly 'Attending physio → Lifetime Health clinical team'. Never mention any individual name.`;
+- followup.escalation_pathway: always exactly 'Attending physio → Lifetime Health clinical team'. Never mention any individual name.
+
+Pain trajectory rules — apply ALL:
+- Generate one data point every 2 weeks from week 0 to total duration_weeks (inclusive). Week 0 expected = current pain score.
+- Final point expected = target pain score from short_term_goals (typically 2 or less).
+- Curve shape rules:
+  * Acute conditions (ankle sprain, post-surgical Day 1–14, fracture rehab): steep drop in first 4 weeks, then plateau. Drop ~50% of total reduction by week 4.
+  * Subacute conditions (rotator cuff, frozen shoulder, LBP 6–12 weeks): linear gradual decline.
+  * Chronic conditions (chronic LBP, OA, neck pain >12 weeks): slow gradual decline with minor week-to-week changes.
+  * Neurological conditions (stroke, Parkinson's, MS, CP): very gradual reduction; pain may not be primary outcome — plateau at 3–4/10 is acceptable.
+- Add "milestone" field at week 0 ("Baseline"), at end of each phase (e.g. "End of Phase 1"), and at final week ("Discharge target"). Omit milestone on intermediate points.`;
 
   const userMessage = `PROTOCOL TEMPLATE:
 ${JSON.stringify(proto, null, 2)}
@@ -924,6 +942,200 @@ function renderPlan() {
     mt.appendChild(row);
   });
   body.appendChild(mt);
+
+  // Pain Recovery Trajectory chart
+  const pt = p.pain_trajectory;
+  if (pt && pt.length >= 2) {
+    const chartCard = h('div', s({
+      background: 'white',
+      borderRadius: 10,
+      padding: 14,
+      marginBottom: 12,
+      border: '1px solid ' + B.border
+    }));
+
+    // Title row
+    const chartTitleRow = h('div', s({
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      marginBottom: 4
+    }));
+    chartTitleRow.appendChild(h('div', s({
+      fontSize: 11,
+      fontWeight: 600,
+      color: B.navy,
+      textTransform: 'uppercase',
+      letterSpacing: '0.8px'
+    }), 'Pain recovery trajectory'));
+    chartTitleRow.appendChild(h('div', s({
+      fontSize: 11,
+      fontWeight: 500,
+      color: B.muted,
+      background: B.bg,
+      padding: '3px 8px',
+      borderRadius: 20,
+      border: '1px solid ' + B.border
+    }), 'Expected'));
+    chartCard.appendChild(chartTitleRow);
+
+    chartCard.appendChild(h('div', s({
+      fontSize: 12,
+      color: B.muted,
+      marginBottom: 14,
+      lineHeight: '1.4'
+    }), 'Estimated pain reduction over your recovery period'));
+
+    // SVG chart
+    const W_c = 480, H_c = 200;
+    const PAD = { top: 20, right: 30, bottom: 32, left: 32 };
+    const cw_c = W_c - PAD.left - PAD.right;
+    const ch_c = H_c - PAD.top - PAD.bottom;
+
+    const maxWeek = Math.max(...pt.map(d => d.week));
+    const xScale = w => PAD.left + (w / maxWeek) * cw_c;
+    const yScale = v => PAD.top + (1 - v / 10) * ch_c;
+
+    const ns = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(ns, 'svg');
+    svg.setAttribute('viewBox', `0 0 ${W_c} ${H_c}`);
+    svg.setAttribute('width', '100%');
+    svg.style.maxWidth = W_c + 'px';
+    svg.style.height = 'auto';
+    svg.style.display = 'block';
+
+    // Background zones
+    const goodZone = document.createElementNS(ns, 'rect');
+    goodZone.setAttribute('x', PAD.left);
+    goodZone.setAttribute('y', yScale(4));
+    goodZone.setAttribute('width', cw_c);
+    goodZone.setAttribute('height', yScale(0) - yScale(4));
+    goodZone.setAttribute('fill', '#F0FDF4');
+    svg.appendChild(goodZone);
+
+    const alertZone = document.createElementNS(ns, 'rect');
+    alertZone.setAttribute('x', PAD.left);
+    alertZone.setAttribute('y', yScale(10));
+    alertZone.setAttribute('width', cw_c);
+    alertZone.setAttribute('height', yScale(6) - yScale(10));
+    alertZone.setAttribute('fill', '#FEF2F2');
+    svg.appendChild(alertZone);
+
+    // Grid lines
+    for (let v = 0; v <= 10; v += 2) {
+      const line = document.createElementNS(ns, 'line');
+      line.setAttribute('x1', PAD.left);
+      line.setAttribute('x2', PAD.left + cw_c);
+      line.setAttribute('y1', yScale(v));
+      line.setAttribute('y2', yScale(v));
+      line.setAttribute('stroke', '#E2E8F0');
+      line.setAttribute('stroke-width', '0.5');
+      svg.appendChild(line);
+
+      const ylabel = document.createElementNS(ns, 'text');
+      ylabel.setAttribute('x', PAD.left - 6);
+      ylabel.setAttribute('y', yScale(v) + 3);
+      ylabel.setAttribute('text-anchor', 'end');
+      ylabel.setAttribute('font-size', '9');
+      ylabel.setAttribute('fill', B.muted);
+      ylabel.setAttribute('font-family', 'sans-serif');
+      ylabel.textContent = v;
+      svg.appendChild(ylabel);
+    }
+
+    // X-axis week labels
+    pt.forEach(d => {
+      const xlabel = document.createElementNS(ns, 'text');
+      xlabel.setAttribute('x', xScale(d.week));
+      xlabel.setAttribute('y', H_c - 14);
+      xlabel.setAttribute('text-anchor', 'middle');
+      xlabel.setAttribute('font-size', '9');
+      xlabel.setAttribute('fill', B.muted);
+      xlabel.setAttribute('font-family', 'sans-serif');
+      xlabel.textContent = 'W' + d.week;
+      svg.appendChild(xlabel);
+    });
+
+    // Trajectory line — smooth path
+    const linePath = pt.map((d, i) =>
+      (i === 0 ? 'M' : 'L') + xScale(d.week) + ',' + yScale(d.expected)
+    ).join(' ');
+
+    const trajPath = document.createElementNS(ns, 'path');
+    trajPath.setAttribute('d', linePath);
+    trajPath.setAttribute('stroke', '#3B6FE8');
+    trajPath.setAttribute('stroke-width', '2.5');
+    trajPath.setAttribute('fill', 'none');
+    trajPath.setAttribute('stroke-linecap', 'round');
+    trajPath.setAttribute('stroke-linejoin', 'round');
+
+    // Filled area under line
+    const areaPath = linePath + ` L ${xScale(maxWeek)},${yScale(0)} L ${xScale(0)},${yScale(0)} Z`;
+    const area = document.createElementNS(ns, 'path');
+    area.setAttribute('d', areaPath);
+    area.setAttribute('fill', '#3B6FE8');
+    area.setAttribute('fill-opacity', '0.08');
+    svg.appendChild(area);
+    svg.appendChild(trajPath);
+
+    // Data points + value labels
+    pt.forEach(d => {
+      const dot = document.createElementNS(ns, 'circle');
+      dot.setAttribute('cx', xScale(d.week));
+      dot.setAttribute('cy', yScale(d.expected));
+      dot.setAttribute('r', d.milestone ? 5 : 3.5);
+      dot.setAttribute('fill', '#3B6FE8');
+      dot.setAttribute('stroke', 'white');
+      dot.setAttribute('stroke-width', '2');
+      svg.appendChild(dot);
+
+      const vlabel = document.createElementNS(ns, 'text');
+      vlabel.setAttribute('x', xScale(d.week));
+      vlabel.setAttribute('y', yScale(d.expected) - 9);
+      vlabel.setAttribute('text-anchor', 'middle');
+      vlabel.setAttribute('font-size', '10');
+      vlabel.setAttribute('font-weight', '700');
+      vlabel.setAttribute('fill', B.navy);
+      vlabel.setAttribute('font-family', 'sans-serif');
+      vlabel.textContent = d.expected;
+      svg.appendChild(vlabel);
+    });
+
+    chartCard.appendChild(svg);
+
+    // Legend
+    const legend = h('div', s({
+      display: 'flex',
+      gap: 16,
+      marginTop: 10,
+      fontSize: 11,
+      color: B.muted,
+      flexWrap: 'wrap'
+    }));
+    legend.appendChild(h('div', s({display:'flex',alignItems:'center',gap:6}),
+      h('span', s({width:10, height:10, borderRadius:5, background:'#F0FDF4', border:'1px solid #BBF7D0', display:'inline-block'})),
+      'Goal zone (0–4)'
+    ));
+    legend.appendChild(h('div', s({display:'flex',alignItems:'center',gap:6}),
+      h('span', s({width:10, height:10, borderRadius:5, background:'#FEF2F2', border:'1px solid #FECACA', display:'inline-block'})),
+      'Alert zone (6+)'
+    ));
+    chartCard.appendChild(legend);
+
+    // Disclaimer
+    chartCard.appendChild(h('div', s({
+      marginTop: 12,
+      padding: '8px 10px',
+      background: '#FFF7ED',
+      border: '1px solid #FED7AA',
+      borderRadius: 6,
+      fontSize: 11,
+      color: '#92400E',
+      lineHeight: '1.4'
+    }), '\u26a0 Estimate based on typical recovery for this condition. Individual recovery varies \u2014 discuss any concerns with your physiotherapist.'));
+
+    body.appendChild(chartCard);
+  }
 
   // Follow-up & continuity
   const fu = p.followup;

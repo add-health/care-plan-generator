@@ -102,6 +102,111 @@ LOGO_PATH   = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'assets',
 LOGO_ASPECT = 611 / 1557   # height / width
 
 
+def draw_pain_trajectory(c, y, trajectory):
+    """Draw pain recovery trajectory chart. Returns new y position."""
+    if not trajectory or len(trajectory) < 2:
+        return y
+
+    # Section header
+    fill_rect(c, ML, y - 9.5*mm, CW, 9.5*mm, col('blue'), radius=2*mm)
+    text(c, 'PAIN RECOVERY TRAJECTORY', ML + 4*mm, y - 9.5*mm + 3.2*mm,
+         'Helvetica-Bold', 8.5, white)
+    y -= 9.5*mm + 4*mm
+
+    # Chart card
+    chart_h = 65*mm
+    chart_x = ML + 14*mm
+    chart_w = CW - 18*mm
+    chart_top = y - 8*mm
+    chart_bot = y - chart_h + 12*mm
+    ch_h = chart_top - chart_bot
+
+    fill_rect(c, ML, y - chart_h, CW, chart_h, white)
+    c.setStrokeColor(col('line'))
+    c.setLineWidth(0.5)
+    c.rect(ML, y - chart_h, CW, chart_h)
+
+    max_week = max(d.get('week', 0) for d in trajectory) or 1
+
+    def x_scale(week):
+        return chart_x + (week / max_week) * chart_w
+
+    def y_scale(val):
+        return chart_bot + (val / 10) * ch_h
+
+    # Background zones
+    fill_rect(c, chart_x, y_scale(0), chart_w,
+              y_scale(4) - y_scale(0), HexColor('#F0FDF4'))
+    fill_rect(c, chart_x, y_scale(6), chart_w,
+              y_scale(10) - y_scale(6), HexColor('#FEF2F2'))
+
+    # Grid + Y labels
+    c.setStrokeColor(col('line'))
+    c.setLineWidth(0.3)
+    for v in range(0, 11, 2):
+        gy = y_scale(v)
+        c.line(chart_x, gy, chart_x + chart_w, gy)
+        text(c, str(v), chart_x - 4, gy - 2, size=6.5,
+             color=col('grey3'), align='right')
+
+    # X labels
+    for d in trajectory:
+        wk = d.get('week', 0)
+        text(c, f"W{wk}", x_scale(wk), chart_bot - 5,
+             size=6.5, color=col('grey3'), align='center')
+
+    # Fill area (polygon under line)
+    c.setFillColor(HexColor('#DBEAFE'))
+    p_path = c.beginPath()
+    p_path.moveTo(x_scale(trajectory[0].get('week', 0)), y_scale(0))
+    for d in trajectory:
+        p_path.lineTo(x_scale(d.get('week', 0)),
+                      y_scale(d.get('expected', 0)))
+    p_path.lineTo(x_scale(trajectory[-1].get('week', 0)), y_scale(0))
+    p_path.close()
+    c.drawPath(p_path, fill=1, stroke=0)
+
+    # Line on top
+    c.setStrokeColor(col('blue'))
+    c.setLineWidth(2)
+    line_path = c.beginPath()
+    for i, d in enumerate(trajectory):
+        wk = d.get('week', 0)
+        val = d.get('expected', 0)
+        if i == 0:
+            line_path.moveTo(x_scale(wk), y_scale(val))
+        else:
+            line_path.lineTo(x_scale(wk), y_scale(val))
+    c.drawPath(line_path, fill=0, stroke=1)
+
+    # Points + value labels
+    for d in trajectory:
+        wk = d.get('week', 0)
+        val = d.get('expected', 0)
+        is_milestone = bool(d.get('milestone'))
+        radius = 2.5 if is_milestone else 1.8
+
+        c.setFillColor(white)
+        c.circle(x_scale(wk), y_scale(val), radius + 0.8, fill=1, stroke=0)
+        c.setFillColor(col('blue'))
+        c.circle(x_scale(wk), y_scale(val), radius, fill=1, stroke=0)
+
+        text(c, str(val), x_scale(wk), y_scale(val) + 4,
+             'Helvetica-Bold', 7, col('navy2'), align='center')
+
+    y -= chart_h + 2*mm
+
+    # Disclaimer
+    disc_h = 8*mm
+    fill_rect(c, ML, y - disc_h, CW, disc_h, HexColor('#FFF7ED'),
+              radius=2*mm)
+    text(c, 'Estimate based on typical recovery for this condition. '
+            'Individual recovery varies \u2014 discuss with your physiotherapist.',
+         ML + 4*mm, y - disc_h + 3*mm, size=7, color=HexColor('#92400E'))
+    y -= disc_h + 4*mm
+    return y
+
+
 def generate_plan_pdf(patient, plan, output_path):
     c = rc.Canvas(output_path, pagesize=A4)
     page_num = [1]
@@ -141,39 +246,44 @@ def generate_plan_pdf(patient, plan, output_path):
         return y
 
     # ── PAGE 1: HEADER ───────────────────────────────────────────────
-    HDR = 63 * mm
+    HDR = 72 * mm
     gradient(c, 0, H-HDR, W, HDR, col('navy1'), col('navy2'))
 
-    # Logo image
+    # Logo image — top-left, bottom y = H - 32*mm
     logo_w = 50 * mm
     logo_h = logo_w * LOGO_ASPECT
     if os.path.exists(LOGO_PATH):
-        c.drawImage(LOGO_PATH, ML, H - 12*mm - logo_h, width=logo_w, height=logo_h, mask='auto')
-    text(c, 'Home Healthcare Platform  ·  Bangalore',
-         ML, H - 14*mm - logo_h, size=8, color=col('grey3'))
+        c.drawImage(LOGO_PATH, ML, H - 32*mm, width=logo_w, height=logo_h, mask='auto')
 
-    # Treatment Plan badge
-    bw = 50 * mm
-    fill_rect(c, W-MR-bw, H-23*mm, bw, 9*mm, col('blue'), radius=2*mm)
-    text(c, 'TREATMENT PLAN', W-MR-bw/2, H-18.5*mm, 'Helvetica-Bold', 8, white, 'center')
+    # Treatment Plan badge — top-right
+    bw = 50*mm
+    bh = 9*mm
+    bx = W - MR - bw
+    by = H - 23*mm
+    fill_rect(c, bx, by, bw, bh, col('blue'), radius=2*mm)
+    text(c, 'TREATMENT PLAN', bx + bw / 2, by + bh / 2 - 2.2, 'Helvetica-Bold', 8, white, 'center')
 
     # BETA badge
-    beta_w = 22 * mm
-    fill_rect(c, W-MR-beta_w, H-33*mm, beta_w, 6*mm, HexColor('#3B6FE8'), radius=2*mm)
-    text(c, 'BETA', W-MR-beta_w/2, H-29*mm, 'Helvetica-Bold', 7, white, 'center')
+    beta_w = 22*mm
+    beta_h = 6*mm
+    beta_x = W - MR - beta_w
+    beta_y = H - 33*mm
+    fill_rect(c, beta_x, beta_y, beta_w, beta_h, HexColor('#3B6FE8'), radius=2*mm)
+    text(c, 'BETA', beta_x + beta_w / 2, beta_y + beta_h / 2 - 2.2, 'Helvetica-Bold', 7.5, white, 'center')
 
-    # Date (moved clear of BETA badge)
-    text(c, patient.get('date', ''), W-MR, H-42*mm, size=7.5, color=col('grey3'), align='right')
+    # Patient name + date — well below logo bottom (H - 32*mm)
+    text(c, patient.get('date', ''), W-MR, H-50*mm, size=7.5, color=col('grey3'), align='right')
+    text(c, name, ML, H-50*mm, 'Helvetica-Bold', 22, white)
 
-    text(c, name, ML, H-42*mm, 'Helvetica-Bold', 23, white)
+    # Demographics
     text(c, f"{age}{'y  ·  ' if age else ''}{gender}{'  ·  ' if gender else ''}{zone}",
-         ML, H-50.5*mm, size=9.5, color=col('grey3'))
+         ML, H-58*mm, size=9.5, color=col('grey3'))
 
     # Condition tag
     c.setFont('Helvetica-Bold', 7.5)
     tw = c.stringWidth(condition, 'Helvetica-Bold', 7.5) + 10
-    fill_rect(c, ML, H-61*mm, tw, 6.5*mm, col('navy2'), radius=2*mm)
-    text(c, condition, ML+5, H-56.5*mm, 'Helvetica-Bold', 7.5, col('blue_l'))
+    fill_rect(c, ML, H-69.5*mm, tw, 6.5*mm, col('navy2'), radius=2*mm)
+    text(c, condition, ML+5, H-65*mm, 'Helvetica-Bold', 7.5, col('blue_l'))
 
     # ── STAT PILLS ───────────────────────────────────────────────────
     stats_y = H - HDR - 2*mm
@@ -372,6 +482,13 @@ def generate_plan_pdf(patient, plan, output_path):
     list_box(ML+half+5*mm, y, half, '✓  HOME ADVICE', advice, col('blue'), col('blue_l'), '✓', col('navy2'))
     y -= fh1 + 4*mm
 
+    # ── PAIN RECOVERY TRAJECTORY ─────────────────────────────────────
+    trajectory = plan.get('pain_trajectory', [])
+    if trajectory:
+        if y < 90*mm:
+            y = new_page()
+        y = draw_pain_trajectory(c, y, trajectory)
+
     # ── FOLLOW-UP & CONTINUITY ───────────────────────────────────────
     fu             = plan.get('followup', {})
     reassessment   = fu.get('reassessment_date', '—')
@@ -516,6 +633,14 @@ SAMPLE_PLAN = {
         'Daily blood sugar monitoring — share readings with care team',
         'High protein diet (eggs, dal, paneer) — accelerates healing',
         'Do not skip Week 1–2 sessions — continuity is critical for recovery',
+    ],
+    'pain_trajectory': [
+        {'week': 0,  'expected': 6, 'milestone': 'Baseline'},
+        {'week': 2,  'expected': 4, 'milestone': 'End of Phase 1'},
+        {'week': 4,  'expected': 3},
+        {'week': 6,  'expected': 2, 'milestone': 'End of Phase 2'},
+        {'week': 8,  'expected': 2},
+        {'week': 10, 'expected': 2, 'milestone': 'Discharge target'},
     ],
     'package': 'Senior Citizen Physiotherapy Plan',
     'followup': {
