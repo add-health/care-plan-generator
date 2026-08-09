@@ -216,7 +216,7 @@ const PHASE_COLS = [
    STATE
    ───────────────────────────────────────────────────────────────── */
 let state = {
-  screen: 'form',  // 'form' | 'loading' | 'plan'
+  screen: 'select',  // 'select' | 'form' | 'loading' | 'plan'
   step: 0,         // 0 | 1 | 2
   form: {
     name:'', age:'', gender:'Female', zone:'Jayanagar',
@@ -1313,7 +1313,7 @@ function renderPlan() {
   const acts = h('div', {class:'no-print', style:{paddingBottom:24}});
   const row1 = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:10, marginBottom:10}));
   const btn1 = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:14, fontWeight:500, cursor:'pointer'}}, 'New assessment');
-  btn1.addEventListener('click', () => { state.plan = null; state.screen = 'form'; state.step = 0; render(); });
+  btn1.addEventListener('click', () => { state.plan = null; state.screen = 'select'; state.step = 0; render(); });
   const btn3 = h('button', {type:'button', style:{
     padding:'13px 0', borderRadius:10, border:'none',
     background:B.navy, color:'white',
@@ -1423,6 +1423,72 @@ function renderPlan() {
   return wrap;
 }
 
+function renderServiceSelect() {
+  const wrap = h('div', s({
+    background: B.bg, minHeight: '100vh',
+    display: 'flex', flexDirection: 'column'
+  }));
+  wrap.appendChild(renderHeader('Care Plan Generator — Beta v1'));
+
+  const body = h('div', s({ padding: '36px 20px', flex: '1' }));
+  body.appendChild(h('div', s({
+    fontSize: 20, fontWeight: 700, color: B.navy,
+    marginBottom: 6, textAlign: 'center'
+  }), 'What are you creating today?'));
+  body.appendChild(h('div', s({
+    fontSize: 14, color: B.muted, marginBottom: 32,
+    textAlign: 'center', lineHeight: '1.5'
+  }), 'Select the service line for this patient'));
+
+  const services = [
+    { title: 'Physiotherapy', desc: 'Treatment plan with phases, exercises and recovery trajectory', url: null },
+    { title: 'Caregiving',    desc: 'Daily care routine, monitoring and session record sheet',        url: '/caregiver' }
+  ];
+
+  const cards = h('div', s({
+    display: 'flex', flexDirection: 'column', gap: 14,
+    maxWidth: 420, margin: '0 auto'
+  }));
+
+  services.forEach(svc => {
+    const card = h('button', { type: 'button', style: {
+      display: 'flex', alignItems: 'center', gap: 14, width: '100%',
+      padding: '20px 18px', textAlign: 'left', background: 'white',
+      border: '1.5px solid ' + B.border, borderRadius: 12,
+      cursor: 'pointer', transition: 'all 0.15s'
+    }});
+    const textCol = h('div', s({ flex: '1' }));
+    textCol.appendChild(h('div', s({
+      fontSize: 16, fontWeight: 700, color: B.navy, marginBottom: 4
+    }), svc.title));
+    textCol.appendChild(h('div', s({
+      fontSize: 13, color: B.muted, lineHeight: '1.45'
+    }), svc.desc));
+    card.appendChild(textCol);
+    card.appendChild(h('div', s({
+      fontSize: 20, color: B.blue, flexShrink: 0
+    }), '→'));
+
+    card.addEventListener('mouseenter', () => {
+      card.style.border = '1.5px solid ' + B.blue;
+      card.style.background = B.blueLt;
+    });
+    card.addEventListener('mouseleave', () => {
+      card.style.border = '1.5px solid ' + B.border;
+      card.style.background = 'white';
+    });
+    card.addEventListener('click', () => {
+      if (svc.url) window.location.href = svc.url;
+      else { state.screen = 'form'; state.step = 0; render(); }
+    });
+    cards.appendChild(card);
+  });
+
+  body.appendChild(cards);
+  wrap.appendChild(body);
+  return wrap;
+}
+
 function renderForm() {
   const wrap = h('div', s({background:B.bg, minHeight:'100vh', display:'flex', flexDirection:'column'}));
   wrap.appendChild(renderHeader('Care Plan Generator — Beta v1'));
@@ -1449,6 +1515,10 @@ function renderForm() {
     const back = h('button', {type:'button', style:{flex:'1', padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:15, fontWeight:500, cursor:'pointer'}}, '← Back');
     back.addEventListener('click', () => { state.step--; render(); });
     nav.appendChild(back);
+  } else {
+    const services = h('button', {type:'button', style:{flex:'1', padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:15, fontWeight:500, cursor:'pointer'}}, '← Services');
+    services.addEventListener('click', () => { state.screen = 'select'; render(); });
+    nav.appendChild(services);
   }
 
   const fwd = h('button', {type:'button', id:'nav-fwd', style:{
@@ -1479,7 +1549,8 @@ function render() {
   const app = document.getElementById('app');
   app.innerHTML = '';
   let screen;
-  if (state.screen === 'loading') screen = renderLoading();
+  if (state.screen === 'select') screen = renderServiceSelect();
+  else if (state.screen === 'loading') screen = renderLoading();
   else if (state.screen === 'plan' && state.plan) screen = renderPlan();
   else screen = renderForm();
   app.appendChild(screen);

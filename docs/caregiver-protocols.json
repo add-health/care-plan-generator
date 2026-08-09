@@ -1,0 +1,127 @@
+// Draft archetypes derived from visit data — pending clinical review by Nabil and Sajina.
+[
+  {
+    "care_type": "Post-surgical recovery",
+    "overview": "Support during recovery at home after surgery or hospital discharge.",
+    "typical_duration": "2-6 weeks depending on procedure",
+    "core_tasks": [
+      "Wound observation and dressing support",
+      "Vitals monitoring",
+      "Mobility and transfer assistance",
+      "Personal hygiene and bathing",
+      "Medication reminders",
+      "Pain and comfort monitoring"
+    ],
+    "key_risks": [
+      "Wound infection",
+      "Blood clots from immobility",
+      "Falls during early mobilisation",
+      "Constipation from pain medication"
+    ],
+    "monitoring_focus": "Temperature, wound appearance, pain level, mobility progress"
+  },
+  {
+    "care_type": "Elderly dependency care",
+    "overview": "Daily living support for older adults who need help with personal care and mobility.",
+    "typical_duration": "Ongoing, reviewed monthly",
+    "core_tasks": [
+      "Bathing and personal hygiene",
+      "Grooming and dressing",
+      "Feeding assistance",
+      "Mobility and walking support",
+      "Continence care",
+      "Companionship and engagement"
+    ],
+    "key_risks": [
+      "Falls",
+      "Dehydration",
+      "Pressure sores",
+      "Social isolation",
+      "Medication errors"
+    ],
+    "monitoring_focus": "Fall incidents, appetite and fluid intake, skin condition, mood"
+  },
+  {
+    "care_type": "Bedbound / high-dependency care",
+    "overview": "Full care for patients confined to bed or with very limited movement.",
+    "typical_duration": "Ongoing, reviewed monthly",
+    "core_tasks": [
+      "Position change every 2 hours",
+      "Pressure area care",
+      "Bed bath and hygiene",
+      "Feeding support or tube feeding",
+      "Catheter or continence care",
+      "Passive limb exercises"
+    ],
+    "key_risks": [
+      "Pressure sores",
+      "Chest infection",
+      "Contractures",
+      "Aspiration during feeding",
+      "Urinary infection"
+    ],
+    "monitoring_focus": "Skin integrity at pressure points, breathing, bowel and bladder output, feeding tolerance"
+  },
+  {
+    "care_type": "Chronic condition support",
+    "overview": "Daily support for patients managing diabetes, heart, kidney or blood pressure conditions.",
+    "typical_duration": "Ongoing, reviewed monthly",
+    "core_tasks": [
+      "Vitals monitoring",
+      "Blood sugar checks",
+      "Medication reminders and support",
+      "Diet and fluid support",
+      "Symptom observation",
+      "Light activity encouragement"
+    ],
+    "key_risks": [
+      "Blood sugar swings",
+      "Blood pressure spikes",
+      "Fluid overload",
+      "Missed medication",
+      "Silent symptom escalation"
+    ],
+    "monitoring_focus": "Blood pressure, blood sugar, weight, swelling, breathlessness"
+  },
+  {
+    "care_type": "Stroke and neurological care",
+    "overview": "Support for patients recovering from stroke or living with Parkinson's, paralysis or similar conditions.",
+    "typical_duration": "3-12 months, often ongoing",
+    "core_tasks": [
+      "Transfer and mobility assistance",
+      "Prescribed exercise support",
+      "Swallowing precautions during meals",
+      "Communication support",
+      "Personal hygiene",
+      "Fall prevention"
+    ],
+    "key_risks": [
+      "Falls",
+      "Choking or aspiration",
+      "Shoulder injury on weak side",
+      "Muscle stiffness",
+      "Frustration and low mood"
+    ],
+    "monitoring_focus": "Movement on affected side, swallowing, speech, balance, mood"
+  },
+  {
+    "care_type": "Palliative and comfort care",
+    "overview": "Comfort-focused care for patients with advanced illness, with support for the family.",
+    "typical_duration": "Ongoing",
+    "core_tasks": [
+      "Comfort positioning",
+      "Gentle hygiene and mouth care",
+      "Pain and symptom observation",
+      "Nutrition and hydration as tolerated",
+      "Emotional presence",
+      "Family support and guidance"
+    ],
+    "key_risks": [
+      "Uncontrolled pain",
+      "Pressure sores",
+      "Dehydration",
+      "Family distress"
+    ],
+    "monitoring_focus": "Comfort level, pain, breathing, skin, family wellbeing"
+  }
+]

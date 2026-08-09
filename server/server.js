@@ -201,6 +201,11 @@ app.post('/download-pdf', async (req, res) => {
 
 // ── Serve frontend ──────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '..', 'public')));
+
+app.get('/caregiver', (req, res) => {
+  res.sendFile(path.join(__dirname, '..', 'public', 'caregiver.html'));
+});
+
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });

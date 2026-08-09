@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Caregiver Care Plan — Lifetime Health</title>
+<style>
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#F8FAFC;color:#1E293B;min-height:100vh}
+  input,select,textarea,button{font-family:inherit;font-size:15px}
+  input[type=range]{-webkit-appearance:none;appearance:none;height:6px;border-radius:3px;background:#E2E8F0;outline:none;width:100%}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:22px;height:22px;border-radius:11px;background:#2563EB;cursor:pointer;border:3px solid white;box-shadow:0 1px 4px rgba(0,0,0,.2)}
+  select{-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%2364748B' stroke-width='1.5' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+  .spin{animation:spin 0.9s linear infinite}
+  .fade-up{animation:fadeUp 0.25s ease forwards}
+  input:focus,select:focus,textarea:focus{outline:none;border-color:#2563EB !important;box-shadow:0 0 0 3px rgba(37,99,235,0.1)}
+  .form-section > * + * { margin-top: 20px; }
+  @media print{
+    .no-print{display:none !important}
+    body{background:white}
+    *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{margin:15mm}
+  }
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+/* ─────────────────────────────────────────────────────────────────
+   CARE ARCHETYPES
+   Draft archetypes derived from visit data — pending clinical
+   review by Nabil and Sajina. Mirror of docs/caregiver-protocols.json.
+   ───────────────────────────────────────────────────────────────── */
+const CARE_PROTOCOLS = [
+  {
+    care_type: 'Post-surgical recovery',
+    overview: 'Support during recovery at home after surgery or hospital discharge.',
+    typical_duration: '2-6 weeks depending on procedure',
+    core_tasks: ['Wound observation and dressing support','Vitals monitoring','Mobility and transfer assistance','Personal hygiene and bathing','Medication reminders','Pain and comfort monitoring'],
+    key_risks: ['Wound infection','Blood clots from immobility','Falls during early mobilisation','Constipation from pain medication'],
+    monitoring_focus: 'Temperature, wound appearance, pain level, mobility progress'
+  },
+  {
+    care_type: 'Elderly dependency care',
+    overview: 'Daily living support for older adults who need help with personal care and mobility.',
+    typical_duration: 'Ongoing, reviewed monthly',
+    core_tasks: ['Bathing and personal hygiene','Grooming and dressing','Feeding assistance','Mobility and walking support','Continence care','Companionship and engagement'],
+    key_risks: ['Falls','Dehydration','Pressure sores','Social isolation','Medication errors'],
+    monitoring_focus: 'Fall incidents, appetite and fluid intake, skin condition, mood'
+  },
+  {
+    care_type: 'Bedbound / high-dependency care',
+    overview: 'Full care for patients confined to bed or with very limited movement.',
+    typical_duration: 'Ongoing, reviewed monthly',
+    core_tasks: ['Position change every 2 hours','Pressure area care','Bed bath and hygiene','Feeding support or tube feeding','Catheter or continence care','Passive limb exercises'],
+    key_risks: ['Pressure sores','Chest infection','Contractures','Aspiration during feeding','Urinary infection'],
+    monitoring_focus: 'Skin integrity at pressure points, breathing, bowel and bladder output, feeding tolerance'
+  },
+  {
+    care_type: 'Chronic condition support',
+    overview: 'Daily support for patients managing diabetes, heart, kidney or blood pressure conditions.',
+    typical_duration: 'Ongoing, reviewed monthly',
+    core_tasks: ['Vitals monitoring','Blood sugar checks','Medication reminders and support','Diet and fluid support','Symptom observation','Light activity encouragement'],
+    key_risks: ['Blood sugar swings','Blood pressure spikes','Fluid overload','Missed medication','Silent symptom escalation'],
+    monitoring_focus: 'Blood pressure, blood sugar, weight, swelling, breathlessness'
+  },
+  {
+    care_type: 'Stroke and neurological care',
+    overview: "Support for patients recovering from stroke or living with Parkinson's, paralysis or similar conditions.",
+    typical_duration: '3-12 months, often ongoing',
+    core_tasks: ['Transfer and mobility assistance','Prescribed exercise support','Swallowing precautions during meals','Communication support','Personal hygiene','Fall prevention'],
+    key_risks: ['Falls','Choking or aspiration','Shoulder injury on weak side','Muscle stiffness','Frustration and low mood'],
+    monitoring_focus: 'Movement on affected side, swallowing, speech, balance, mood'
+  },
+  {
+    care_type: 'Palliative and comfort care',
+    overview: 'Comfort-focused care for patients with advanced illness, with support for the family.',
+    typical_duration: 'Ongoing',
+    core_tasks: ['Comfort positioning','Gentle hygiene and mouth care','Pain and symptom observation','Nutrition and hydration as tolerated','Emotional presence','Family support and guidance'],
+    key_risks: ['Uncontrolled pain','Pressure sores','Dehydration','Family distress'],
+    monitoring_focus: 'Comfort level, pain, breathing, skin, family wellbeing'
+  }
+];
+
+/* ─────────────────────────────────────────────────────────────────
+   CONSTANTS
+   ───────────────────────────────────────────────────────────────── */
+const B = {
+  navy:    '#1A2744',     // primary brand navy
+  navy2:   '#1E2D5A',     // secondary navy
+  navy3:   '#0F1E3D',     // darker navy for gradients
+  blue:    '#3B6FE8',     // primary brand blue
+  blue2:   '#2563EB',     // accent blue
+  blueLt:  '#EEF2FF',     // light blue surface
+  blueLt2: '#DBEAFE',     // lighter blue surface
+  red:     '#DC2626',
+  redLt:   '#FEE2E2',
+  amber:   '#D97706',
+  bg:      '#F4F6FF',     // page background — pale brand-tinted
+  text:    '#1A2744',     // body text uses brand navy
+  muted:   '#64748B',
+  border:  '#DBEAFE',     // borders tinted with brand blue
+  white:   '#FFFFFF'
+};
+
+const ZONES = ['Marathahalli','Mathikere','Kalyan Nagar','Electronic City','Jayanagar','Yelahanka'];
+const SERVICE_TIERS = ['Basic — 2 hours','Medium — 4 hours','Advanced — 8 hours','Max — 12 hours','Max+ — 24 hours','Bathing assistance only'];
+const CONDITIONS = ['Diabetes','High blood pressure','Heart condition / pacemaker','Kidney disease','Cancer',"Parkinson's disease",'Arthritis / joint pain','Spine or back condition','Stroke / paralysis','Breathing condition','Dementia / memory loss','None'];
+const MOBILITY   = ['Walks independently','Walks with support','Wheelchair','Bedbound'];
+const TRANSFERS  = ['Independent','Help from 1 person','Help from 2 people','Hoist required'];
+const BATHING    = ['Independent','Needs some help','Full assistance','Bed bath only'];
+const CONTINENCE = ['Continent','Occasional accidents','Uses diaper','Catheter','Colostomy'];
+const FEEDING    = ['Eats independently','Needs help','Spoon-fed','NG tube (Ryles)','PEG tube'];
+const COGNITION  = ['Alert and oriented','Mild confusion','Dementia','Non-verbal','Unconscious'];
+const SKIN       = ['Intact','At risk','Pressure sore present'];
+const WOUNDS     = ['None','Surgical wound','Pressure sore','Diabetic wound','Other'];
+const FALL_RISK  = ['Low','Medium','High'];
+const VITALS     = ['Blood pressure','Pulse','Oxygen (SpO2)','Temperature','Blood sugar'];
+const EQUIPMENT  = ['Walker','Wheelchair','Hospital bed','Oxygen','Suction machine','NG tube','Catheter','Colostomy bag','None'];
+
+const STEPS = ['Patient','Background','Dependency','Daily needs'];
+const LAST_STEP = STEPS.length - 1;
+
+/* ─────────────────────────────────────────────────────────────────
+   STATE
+   ───────────────────────────────────────────────────────────────── */
+let state = {
+  screen: 'form',
+  step: 0,
+  form: {
+    name:'', age:'', gender:'Female', zone:'Jayanagar',
+    serviceTier:'', startDate:'', assessedBy:'',
+    careType:'', surgeryDate:'', conditions:[], allergies:'',
+    mobility:'Walks independently', transfers:'Independent',
+    bathing:'Independent', continence:'Continent',
+    feeding:'Eats independently', cognition:'Alert and oriented',
+    skin:'Intact', wounds:'None', woundLocation:'',
+    fallRisk:'Low', vitals:[], medication:'No', medicationTimes:'',
+    equipment:[], emergencyName:'', emergencyPhone:'',
+    doctorName:'', doctorPhone:'', familyNotes:''
+  },
+  error: '',
+  notice: ''
+};
+
+/* ─────────────────────────────────────────────────────────────────
+   DOM HELPERS
+   ───────────────────────────────────────────────────────────────── */
+function h(tag, attrs, ...children) {
+  const el = document.createElement(tag);
+  if (attrs) Object.entries(attrs).forEach(([k,v]) => {
+    if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v);
+  });
+  children.flat().forEach(c => {
+    if (c == null || c === false) return;
+    el.appendChild(typeof c === 'string' || typeof c === 'number' ? document.createTextNode(c) : c);
+  });
+  return el;
+}
+const s = obj => ({ style: obj });
+
+/* ─────────────────────────────────────────────────────────────────
+   REUSABLE UI COMPONENTS
+   ───────────────────────────────────────────────────────────────── */
+function renderHeader(sub) {
+  return h('div', s({background:'linear-gradient(135deg, #1A2744 0%, #1E2D5A 100%)', padding:'16px 20px 18px 20px', display:'flex', alignItems:'center', justifyContent:'space-between', borderBottom:'1px solid rgba(255,255,255,0.08)'}),
+    h('div', null,
+      h('div', s({color:'white', fontSize:16, fontWeight:700, letterSpacing:'0.2px'}), 'Lifetime Health'),
+      sub ? h('div', s({color:'#7DB8F7', fontSize:13, marginTop:3}), sub) : null
+    ),
+    sub ? h('div', s({background:'rgba(255,255,255,0.1)', color:'#93C5FD', fontSize:10, fontWeight:600, padding:'4px 10px', borderRadius:20, letterSpacing:'0.8px'}), 'BETA') : null
+  );
+}
+
+function renderStepBar() {
+  const cur = state.step;
+  const bar = h('div', s({background:B.white, padding:'12px 16px', borderBottom:`1px solid ${B.border}`, display:'flex', alignItems:'center'}));
+  STEPS.forEach((name, i) => {
+    const done = i < cur, active = i === cur;
+    const circle = h('div', s({
+      width:26, height:26, borderRadius:13, flexShrink:0,
+      background: done?B.blue : active?B.blue : B.border,
+      color: done||active ? 'white' : B.muted,
+      fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center'
+    }), done ? '✓' : String(i+1));
+    const cell = h('div', s({display:'flex', alignItems:'center', flexShrink:0}), circle);
+    // Four steps do not fit on a phone with every label shown, so only the current one is named
+    if (active) cell.appendChild(h('span', s({fontSize:12, fontWeight:600, color:B.navy, marginLeft:10}), name));
+    bar.appendChild(cell);
+    if (i < STEPS.length - 1) {
+      bar.appendChild(h('div', s({flex:1, height:1.5, background:done?B.blue:B.border, margin:'0 10px'})));
+    }
+  });
+  return bar;
+}
+
+function renderLabel(text, required) {
+  return h('div', s({fontSize:13, fontWeight:600, color:B.navy, marginBottom:10}),
+    text, required ? h('span', s({color:B.red, marginLeft:2}), '*') : null
+  );
+}
+
+function renderInput(val, onchange, placeholder, type='text') {
+  const el = h('input', {type, placeholder, value:val, style:{
+    width:'100%', padding:'14px 14px', borderRadius:8,
+    border:`1px solid ${B.border}`, fontSize:16, color:B.text, background:'white'
+  }});
+  el.addEventListener('input', e => onchange(e.target.value));
+  return el;
+}
+
+function renderSelect(val, onchange, options) {
+  const el = h('select', s({
+    width:'100%', padding:'14px 36px 14px 14px', borderRadius:8,
+    border:`1px solid ${B.border}`, fontSize:15, background:'white',
+    color:val ? B.text : B.muted
+  }));
+  const blank = document.createElement('option');
+  blank.value = ''; blank.textContent = 'Select...'; el.appendChild(blank);
+  options.forEach(o => {
+    const opt = document.createElement('option');
+    opt.value = o; opt.textContent = o;
+    if (o === val) opt.selected = true;
+    el.appendChild(opt);
+  });
+  el.addEventListener('change', e => onchange(e.target.value));
+  return el;
+}
+
+function renderTextarea(val, onchange, placeholder, rows) {
+  const el = h('textarea', {placeholder, rows, style:{
+    width:'100%', padding:'10px 12px', borderRadius:8, border:`1px solid ${B.border}`,
+    fontSize:14, resize:'none', color:B.text, lineHeight:'1.6'
+  }}, val);
+  el.addEventListener('input', e => onchange(e.target.value));
+  return el;
+}
+
+function renderChips(options, key, toggle, label) {
+  const wrap = h('div', s({marginBottom:24}));
+  if (label) wrap.appendChild(renderLabel(label));
+  const chips = h('div', s({display:'flex', flexWrap:'wrap', gap:7, marginTop:8}));
+  options.forEach(o => {
+    const sel = (state.form[key]||[]).includes(o);
+    const chip = h('button', {type:'button', style:{
+      padding:'7px 13px', borderRadius:20,
+      border:`1.5px solid ${sel?B.blue:B.border}`,
+      background:sel?B.blueLt:'white', color:sel?B.navy:B.muted,
+      fontSize:13, fontWeight:sel?600:400, cursor:'pointer'
+    }}, o);
+    chip.addEventListener('click', () => {
+      toggle(o);
+      Array.from(chips.children).forEach(sibling => {
+        const sibSel = (state.form[key]||[]).includes(sibling.textContent);
+        sibling.style.border = `1.5px solid ${sibSel ? B.blue : B.border}`;
+        sibling.style.background = sibSel ? B.blueLt : 'white';
+        sibling.style.color = sibSel ? B.navy : B.muted;
+        sibling.style.fontWeight = sibSel ? '600' : '400';
+      });
+    });
+    chips.appendChild(chip);
+  });
+  wrap.appendChild(chips);
+  return wrap;
+}
+
+function renderRadio(options, selected, onChange, label) {
+  const wrap = h('div', s({marginBottom:24}));
+  if (label) wrap.appendChild(renderLabel(label));
+  const group = h('div', s({display:'flex', flexWrap:'wrap', gap:7, marginTop:8}));
+  options.forEach(o => {
+    const sel = selected === o;
+    const btn = h('button', {type:'button', style:{
+      padding:'8px 13px', borderRadius:8,
+      border:`1.5px solid ${sel?B.blue:B.border}`,
+      background:sel?B.blue:'white', color:sel?'white':B.text,
+      fontSize:13, fontWeight:sel?600:400, cursor:'pointer'
+    }}, o);
+    btn.addEventListener('click', () => {
+      onChange(o);
+      Array.from(group.children).forEach(sibling => {
+        const sibSel = sibling.textContent === o;
+        sibling.style.border = `1.5px solid ${sibSel ? B.blue : B.border}`;
+        sibling.style.background = sibSel ? B.blue : 'white';
+        sibling.style.color = sibSel ? 'white' : B.text;
+        sibling.style.fontWeight = sibSel ? '600' : '400';
+      });
+    });
+    group.appendChild(btn);
+  });
+  wrap.appendChild(group);
+  return wrap;
+}
+
+function renderField(label, control, required) {
+  const wrap = h('div', s({marginBottom:28}));
+  wrap.appendChild(renderLabel(label, required));
+  wrap.appendChild(control);
+  return wrap;
+}
+
+function renderSectionHead(title, subtitle) {
+  const box = h('div', null);
+  box.appendChild(h('div', s({fontSize:16, fontWeight:600, color:B.navy, marginBottom:10, marginTop:4}), title));
+  box.appendChild(h('div', s({fontSize:13, color:B.muted, marginBottom:28}), subtitle));
+  return box;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   FORM STEPS
+   ───────────────────────────────────────────────────────────────── */
+function upd(k, v) { state.form = {...state.form, [k]:v}; }
+
+function tog(k, v) {
+  const arr = state.form[k] || [];
+  if (v === 'None') { state.form[k] = ['None']; return; }
+  const filtered = arr.filter(x => x !== 'None');
+  state.form[k] = filtered.includes(v) ? filtered.filter(x => x !== v) : [...filtered, v];
+}
+
+function canProceed(step) {
+  const f = state.form;
+  if (step === 0) return f.name.trim().length > 0 && f.serviceTier.length > 0;
+  if (step === 1) return f.careType.length > 0;
+  return true;
+}
+
+// Update just the nav button appearance without a full re-render (avoids losing input focus)
+function patchNavBtn() {
+  const btn = document.getElementById('nav-fwd');
+  if (!btn) return;
+  const ok = canProceed(state.step);
+  btn.style.background = ok ? B.blue : B.border;
+  btn.style.color = ok ? 'white' : B.muted;
+  btn.style.cursor = ok ? 'pointer' : 'default';
+}
+
+function renderStep0() {
+  const f = state.form;
+  const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
+  sec.appendChild(renderSectionHead('Patient details', 'Who the care plan is for and which service they have booked'));
+
+  sec.appendChild(renderField('Patient name',
+    renderInput(f.name, v => { upd('name', v); patchNavBtn(); }, 'e.g. Meena Sharma'), true));
+
+  const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:28}));
+  grid.appendChild(renderField('Age', renderInput(f.age, v => upd('age', v), 'e.g. 72', 'number')));
+  grid.appendChild(renderField('Gender', renderSelect(f.gender, v => upd('gender', v), ['Female','Male','Other'])));
+  sec.appendChild(grid);
+
+  sec.appendChild(renderField('Zone / Branch', renderSelect(f.zone, v => upd('zone', v), ZONES)));
+  sec.appendChild(renderField('Service tier',
+    renderSelect(f.serviceTier, v => { upd('serviceTier', v); patchNavBtn(); }, SERVICE_TIERS), true));
+  sec.appendChild(renderField('Care start date', renderInput(f.startDate, v => upd('startDate', v), '', 'date')));
+  sec.appendChild(renderField('Assessed by', renderInput(f.assessedBy, v => upd('assessedBy', v), 'Senior nurse or assessor name')));
+  return sec;
+}
+
+function renderStep1() {
+  const f = state.form;
+  const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
+  sec.appendChild(renderSectionHead('Background', 'Care archetype loads automatically on selection'));
+
+  const proto = CARE_PROTOCOLS.find(p => p.care_type === f.careType);
+  const hint = h('div', s({marginTop:8, padding:'9px 12px', borderRadius:8, background:B.blueLt, fontSize:13, color:B.navy, display:proto?'block':'none'}));
+  if (proto) hint.textContent = proto.overview;
+
+  const surgeryW = renderField('Date of surgery or hospital discharge',
+    renderInput(f.surgeryDate, v => upd('surgeryDate', v), '', 'date'));
+  surgeryW.style.display = f.careType === 'Post-surgical recovery' ? 'block' : 'none';
+
+  const careW = renderField('Type of care needed', renderSelect(f.careType, v => {
+    upd('careType', v);
+    const sel = CARE_PROTOCOLS.find(p => p.care_type === v);
+    hint.textContent = sel ? sel.overview : '';
+    hint.style.display = sel ? 'block' : 'none';
+    surgeryW.style.display = v === 'Post-surgical recovery' ? 'block' : 'none';
+    patchNavBtn();
+  }, CARE_PROTOCOLS.map(p => p.care_type)), true);
+  careW.appendChild(hint);
+
+  sec.appendChild(careW);
+  sec.appendChild(surgeryW);
+  sec.appendChild(renderChips(CONDITIONS, 'conditions', v => tog('conditions', v), 'Medical conditions'));
+  sec.appendChild(renderField('Allergies',
+    renderTextarea(f.allergies, v => upd('allergies', v), 'Any known allergies to medicines, food or materials', 2)));
+  return sec;
+}
+
+function renderStep2() {
+  const f = state.form;
+  const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
+  sec.appendChild(renderSectionHead('Dependency assessment', 'How much help does the patient need with daily activities?'));
+
+  const woundLocW = renderField('Wound location',
+    renderInput(f.woundLocation, v => upd('woundLocation', v), 'e.g. lower back, right heel'));
+  woundLocW.style.display = f.wounds === 'None' ? 'none' : 'block';
+
+  sec.appendChild(renderRadio(MOBILITY, f.mobility, v => upd('mobility', v), 'Mobility'));
+  sec.appendChild(renderRadio(TRANSFERS, f.transfers, v => upd('transfers', v), 'Transfers — bed to chair'));
+  sec.appendChild(renderRadio(BATHING, f.bathing, v => upd('bathing', v), 'Bathing'));
+  sec.appendChild(renderRadio(CONTINENCE, f.continence, v => upd('continence', v), 'Continence'));
+  sec.appendChild(renderRadio(FEEDING, f.feeding, v => upd('feeding', v), 'Feeding'));
+  sec.appendChild(renderRadio(COGNITION, f.cognition, v => upd('cognition', v), 'Awareness and communication'));
+  sec.appendChild(renderRadio(SKIN, f.skin, v => upd('skin', v), 'Skin condition'));
+  sec.appendChild(renderRadio(WOUNDS, f.wounds, v => {
+    upd('wounds', v);
+    woundLocW.style.display = v === 'None' ? 'none' : 'block';
+  }, 'Wounds'));
+  sec.appendChild(woundLocW);
+  return sec;
+}
+
+function renderStep3() {
+  const f = state.form;
+  const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
+  sec.appendChild(renderSectionHead('Daily needs and safety', 'Monitoring, medication support and who to call'));
+
+  const medTimesW = renderField('Medication times',
+    renderTextarea(f.medicationTimes, v => upd('medicationTimes', v), 'e.g. 8am after breakfast, 2pm, 9pm before bed', 2));
+  medTimesW.style.display = f.medication === 'Yes' ? 'block' : 'none';
+
+  sec.appendChild(renderRadio(FALL_RISK, f.fallRisk, v => upd('fallRisk', v), 'Fall risk'));
+  sec.appendChild(renderChips(VITALS, 'vitals', v => tog('vitals', v), 'Vitals to monitor'));
+  sec.appendChild(renderRadio(['Yes','No'], f.medication, v => {
+    upd('medication', v);
+    medTimesW.style.display = v === 'Yes' ? 'block' : 'none';
+  }, 'Medication support needed'));
+  sec.appendChild(medTimesW);
+  sec.appendChild(renderChips(EQUIPMENT, 'equipment', v => tog('equipment', v), 'Equipment in use'));
+
+  const emergencyGrid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:28}));
+  emergencyGrid.appendChild(renderField('Emergency contact name', renderInput(f.emergencyName, v => upd('emergencyName', v), 'e.g. Ravi Sharma')));
+  emergencyGrid.appendChild(renderField('Emergency contact phone', renderInput(f.emergencyPhone, v => upd('emergencyPhone', v), '9876543210', 'tel')));
+  sec.appendChild(emergencyGrid);
+
+  const doctorGrid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:28}));
+  doctorGrid.appendChild(renderField('Attending doctor', renderInput(f.doctorName, v => upd('doctorName', v), 'e.g. Dr Nair')));
+  doctorGrid.appendChild(renderField("Doctor's phone", renderInput(f.doctorPhone, v => upd('doctorPhone', v), '9876543210', 'tel')));
+  sec.appendChild(doctorGrid);
+
+  sec.appendChild(renderField('Family notes and preferences',
+    renderTextarea(f.familyNotes, v => upd('familyNotes', v), 'Anything the family wants us to know — routines, preferences, things that upset or comfort the patient', 3)));
+  return sec;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SCREENS
+   ───────────────────────────────────────────────────────────────── */
+function renderForm() {
+  const wrap = h('div', s({background:B.bg, minHeight:'100vh', display:'flex', flexDirection:'column'}));
+  wrap.appendChild(renderHeader('Caregiver Care Plan — Beta v1'));
+  wrap.appendChild(renderStepBar());
+
+  const content = h('div', s({flex:1, paddingTop:8, paddingBottom:10}));
+  const panel = {0:renderStep0, 1:renderStep1, 2:renderStep2, 3:renderStep3}[state.step]?.();
+  if (panel) { panel.classList.add('fade-up'); content.appendChild(panel); }
+  wrap.appendChild(content);
+
+  if (state.error) {
+    wrap.appendChild(h('div', s({margin:'0 16px 8px', padding:10, borderRadius:8, background:B.redLt, color:B.red, fontSize:13}), state.error));
+  }
+  if (state.notice) {
+    wrap.appendChild(h('div', s({margin:'0 16px 8px', padding:10, borderRadius:8, background:B.blueLt, color:B.navy, fontSize:13}), state.notice));
+  }
+
+  // Navigation bar
+  const nav = h('div', {class:'no-print', style:{padding:'12px 16px', background:'white', borderTop:`1px solid ${B.border}`, display:'flex', gap:10, position:'sticky', bottom:0}});
+  const isLast  = state.step === LAST_STEP;
+  const canNext = canProceed(state.step);
+
+  if (state.step > 0) {
+    const back = h('button', {type:'button', style:{flex:'1', padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:15, fontWeight:500, cursor:'pointer'}}, '← Back');
+    back.addEventListener('click', () => { state.step--; render(); });
+    nav.appendChild(back);
+  } else {
+    const services = h('button', {type:'button', style:{flex:'1', padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:15, fontWeight:500, cursor:'pointer'}}, '← Services');
+    services.addEventListener('click', () => { window.location.href = '/'; });
+    nav.appendChild(services);
+  }
+
+  const fwd = h('button', {type:'button', id:'nav-fwd', style:{
+    flex:'2', padding:'13px 0', borderRadius:10, border:'none',
+    background: canNext ? B.blue : B.border,
+    color: canNext ? 'white' : B.muted,
+    fontSize:15, fontWeight:600, cursor: canNext ? 'pointer' : 'default'
+  }}, isLast ? 'Generate care plan →' : 'Next →');
+
+  fwd.addEventListener('click', () => {
+    if (!canProceed(state.step)) return;
+    if (isLast) generate(); else { state.step++; state.notice = ''; render(); }
+  });
+  nav.appendChild(fwd);
+  wrap.appendChild(nav);
+  return wrap;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   GENERATION — placeholder until the AI stage is built
+   ───────────────────────────────────────────────────────────────── */
+function generate() {
+  console.log('Caregiver care plan form state:', state.form);
+  state.notice = 'Form captured. Care plan generation is not built yet — the full assessment is in the browser console.';
+  render();
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   RENDER LOOP
+   ───────────────────────────────────────────────────────────────── */
+function render() {
+  const app = document.getElementById('app');
+  app.innerHTML = '';
+  app.appendChild(renderForm());
+  window.scrollTo(0, 0);
+}
+
+render();
+</script>
+</body>
+</html>
