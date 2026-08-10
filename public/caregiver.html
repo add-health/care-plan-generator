@@ -205,10 +205,29 @@ let state = {
 /* ─────────────────────────────────────────────────────────────────
    DOM HELPERS
    ───────────────────────────────────────────────────────────────── */
+/* The CSS properties that legitimately take a bare number. Anything else given a
+   number is a length: assigning it unitless produces invalid CSS and the browser
+   drops the declaration silently, so applyStyle adds the px. Keep this list in sync
+   with the copy in index.html. */
+const UNITLESS_CSS = new Set([
+  'animationIterationCount','aspectRatio','borderImageOutset','borderImageSlice','borderImageWidth',
+  'columnCount','columns','flex','flexGrow','flexShrink','fontWeight','scale',
+  'gridArea','gridColumn','gridColumnEnd','gridColumnStart','gridRow','gridRowEnd','gridRowStart',
+  'lineClamp','lineHeight','opacity','order','orphans','tabSize','widows','zIndex','zoom',
+  'fillOpacity','floodOpacity','stopOpacity','strokeDasharray','strokeDashoffset',
+  'strokeMiterlimit','strokeOpacity','strokeWidth'
+]);
+
+function applyStyle(el, obj) {
+  Object.entries(obj).forEach(([prop, val]) => {
+    el.style[prop] = typeof val === 'number' && !UNITLESS_CSS.has(prop) ? val + 'px' : val;
+  });
+}
+
 function h(tag, attrs, ...children) {
   const el = document.createElement(tag);
   if (attrs) Object.entries(attrs).forEach(([k,v]) => {
-    if (k === 'style' && typeof v === 'object') Object.assign(el.style, v);
+    if (k === 'style' && typeof v === 'object') applyStyle(el, v);
     else if (k.startsWith('on') && typeof v === 'function') el.addEventListener(k.slice(2).toLowerCase(), v);
     else el.setAttribute(k, v);
   });
