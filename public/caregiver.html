@@ -122,7 +122,57 @@ const FALL_RISK  = ['Low','Medium','High'];
 const VITALS     = ['Blood pressure','Pulse','Oxygen (SpO2)','Temperature','Blood sugar'];
 const EQUIPMENT  = ['Walker','Wheelchair','Hospital bed','Oxygen','Suction machine','NG tube','Catheter','Colostomy bag','None'];
 
-const STEPS = ['Patient','Background','Dependency','Daily needs'];
+const EXERCISE_TYPES = [
+  'Passive limb exercises',
+  'Active-assisted exercises',
+  'Bedside sitting practice',
+  'Sit-to-stand practice',
+  'Walking practice',
+  'Breathing exercises',
+  'Chair exercises',
+  'Hand and grip exercises',
+  'Prescribed physiotherapy exercises',
+  'No exercise — rest advised'
+];
+
+const EXERCISE_FREQUENCY = [
+  'Once daily', 'Twice daily', 'Three times daily',
+  'Every 2 hours', 'As tolerated'
+];
+
+const NO_EXERCISE = 'No exercise — rest advised';
+
+/* Monitoring equipment is deliberately absent: BP apparatus, pulse oximeter,
+   thermometer, glucometer and sanitizer are standard kit every nurse already
+   carries, so they are not a per-patient decision. */
+const KITS = [
+  { name: 'Disposable kit',
+    purpose: 'Gloves, apron and mask. Used at every session to prevent infection.' },
+  { name: 'Bathing kit',
+    purpose: 'Sponge, soap, towel and hygiene supplies for patients who cannot bathe on their own.' },
+  { name: 'Grooming kit',
+    purpose: 'Hair, nail, oral and skin care to keep the patient comfortable and prevent infection.' },
+  { name: 'Diaper kit (L/XL/M)',
+    purpose: 'Diapers and cleaning supplies for continence care and skin protection.' },
+  { name: 'Small dressing kit',
+    purpose: 'Sterile supplies for cleaning and re-dressing a wound safely.' },
+  { name: 'Ryles tube feed kit',
+    purpose: 'Feeding syringe, funnel and flush supplies for patients fed through a nasogastric tube.' },
+  { name: 'Colostomy kit',
+    purpose: 'Bag, adhesive and cleaning supplies for changing a colostomy bag and caring for the stoma.' }
+];
+
+const CONSUMABLES = [
+  'Betadine solution', 'Povidone ointment', 'Hydrogen peroxide',
+  'Normal saline 100ml', 'Syringe 10ml', 'Under pad', 'Sterile gloves',
+  'Bandage roll 4 inch', 'Band aid', 'Alcohol swab', 'Plastic kidney tray',
+  'Dressing set with forceps', 'Cotton balls', 'Plastic scissor',
+  'Micropore', 'Ziplock cover'
+];
+
+const MAX_KIT_QTY = 5;
+
+const STEPS = ['Patient','Background','Dependency','Daily care','Supplies'];
 const LAST_STEP = STEPS.length - 1;
 
 /* ─────────────────────────────────────────────────────────────────
@@ -136,15 +186,20 @@ let state = {
     serviceTier:'', startDate:'', assessedBy:'',
     careType:'', surgeryDate:'', conditions:[], allergies:'',
     mobility:'Walks independently', transfers:'Independent',
-    bathing:'Independent', continence:'Continent',
+    bathing:'Independent', continence:[],
     feeding:'Eats independently', cognition:'Alert and oriented',
     skin:'Intact', wounds:'None', woundLocation:'',
     fallRisk:'Low', vitals:[], medication:'No', medicationTimes:'',
-    equipment:[], emergencyName:'', emergencyPhone:'',
+    exerciseTypes:[], exerciseFrequency:'', exerciseNotes:'',
+    equipment:[], kits:{}, consumables:[], supplyNotes:'',
+    emergencyName:'', emergencyPhone:'',
     doctorName:'', doctorPhone:'', familyNotes:''
   },
   error: '',
-  notice: ''
+  notice: '',
+  // Set the moment a kit or consumable is edited by hand. Emptiness cannot stand in
+  // for this: "every kit removed" and "never opened this step" look identical.
+  suppliesTouched: false
 };
 
 /* ─────────────────────────────────────────────────────────────────
@@ -190,11 +245,11 @@ function renderStepBar() {
       fontSize:11, fontWeight:700, display:'flex', alignItems:'center', justifyContent:'center'
     }), done ? '✓' : String(i+1));
     const cell = h('div', s({display:'flex', alignItems:'center', flexShrink:0}), circle);
-    // Four steps do not fit on a phone with every label shown, so only the current one is named
-    if (active) cell.appendChild(h('span', s({fontSize:12, fontWeight:600, color:B.navy, marginLeft:10}), name));
+    // Five steps do not fit on a phone with every label shown, so only the current one is named
+    if (active) cell.appendChild(h('span', s({fontSize:11, fontWeight:600, color:B.navy, marginLeft:10}), name));
     bar.appendChild(cell);
     if (i < STEPS.length - 1) {
-      bar.appendChild(h('div', s({flex:1, height:1.5, background:done?B.blue:B.border, margin:'0 10px'})));
+      bar.appendChild(h('div', s({flex:1, height:1.5, background:done?B.blue:B.border, margin:'0 6px'})));
     }
   });
   return bar;
@@ -317,12 +372,17 @@ function renderSectionHead(title, subtitle) {
    ───────────────────────────────────────────────────────────────── */
 function upd(k, v) { state.form = {...state.form, [k]:v}; }
 
-function tog(k, v) {
+// Multi-select toggle where one option clears all the others, e.g. 'None' or 'Continent'
+function togEx(k, v, exclusive) {
   const arr = state.form[k] || [];
-  if (v === 'None') { state.form[k] = ['None']; return; }
-  const filtered = arr.filter(x => x !== 'None');
-  state.form[k] = filtered.includes(v) ? filtered.filter(x => x !== v) : [...filtered, v];
+  if (v === exclusive) { state.form[k] = [exclusive]; return; }
+  const filtered = arr.filter(x => x !== exclusive);
+  state.form[k] = filtered.includes(v)
+    ? filtered.filter(x => x !== v)
+    : [...filtered, v];
 }
+
+function tog(k, v) { togEx(k, v, 'None'); }
 
 function canProceed(step) {
   const f = state.form;
@@ -405,7 +465,8 @@ function renderStep2() {
   sec.appendChild(renderRadio(MOBILITY, f.mobility, v => upd('mobility', v), 'Mobility'));
   sec.appendChild(renderRadio(TRANSFERS, f.transfers, v => upd('transfers', v), 'Transfers — bed to chair'));
   sec.appendChild(renderRadio(BATHING, f.bathing, v => upd('bathing', v), 'Bathing'));
-  sec.appendChild(renderRadio(CONTINENCE, f.continence, v => upd('continence', v), 'Continence'));
+  // Multi-select: a patient can have a catheter and a colostomy at the same time
+  sec.appendChild(renderChips(CONTINENCE, 'continence', v => togEx('continence', v, 'Continent'), 'Continence'));
   sec.appendChild(renderRadio(FEEDING, f.feeding, v => upd('feeding', v), 'Feeding'));
   sec.appendChild(renderRadio(COGNITION, f.cognition, v => upd('cognition', v), 'Awareness and communication'));
   sec.appendChild(renderRadio(SKIN, f.skin, v => upd('skin', v), 'Skin condition'));
@@ -420,11 +481,25 @@ function renderStep2() {
 function renderStep3() {
   const f = state.form;
   const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
-  sec.appendChild(renderSectionHead('Daily needs and safety', 'Monitoring, medication support and who to call'));
+  sec.appendChild(renderSectionHead('Daily care and safety', 'Monitoring, medication support and movement'));
 
   const medTimesW = renderField('Medication times',
     renderTextarea(f.medicationTimes, v => upd('medicationTimes', v), 'e.g. 8am after breakfast, 2pm, 9pm before bed', 2));
   medTimesW.style.display = f.medication === 'Yes' ? 'block' : 'none';
+
+  const exFreqW = renderRadio(EXERCISE_FREQUENCY, f.exerciseFrequency,
+    v => upd('exerciseFrequency', v), 'Exercise frequency');
+  const exNotesW = renderField('Exercise instructions',
+    renderTextarea(f.exerciseNotes, v => upd('exerciseNotes', v),
+      'Describe exactly what to do with this patient — which limb, how many repetitions, what to support, what to avoid. e.g. Passive knee bends on left leg, 10 slow reps, support under the heel. Stop if patient winces.', 3));
+
+  // Frequency and instructions are meaningless once rest is advised
+  function applyExerciseVis() {
+    const rest = (state.form.exerciseTypes || []).includes(NO_EXERCISE);
+    exFreqW.style.display = rest ? 'none' : 'block';
+    exNotesW.style.display = rest ? 'none' : 'block';
+  }
+  applyExerciseVis();
 
   sec.appendChild(renderRadio(FALL_RISK, f.fallRisk, v => upd('fallRisk', v), 'Fall risk'));
   sec.appendChild(renderChips(VITALS, 'vitals', v => tog('vitals', v), 'Vitals to monitor'));
@@ -433,7 +508,185 @@ function renderStep3() {
     medTimesW.style.display = v === 'Yes' ? 'block' : 'none';
   }, 'Medication support needed'));
   sec.appendChild(medTimesW);
-  sec.appendChild(renderChips(EQUIPMENT, 'equipment', v => tog('equipment', v), 'Equipment in use'));
+
+  sec.appendChild(h('div', s({paddingTop:20, borderTop:`1px solid ${B.border}`, fontSize:13, fontWeight:600, color:B.navy}), 'Exercise and movement'));
+  sec.appendChild(renderChips(EXERCISE_TYPES, 'exerciseTypes', v => {
+    togEx('exerciseTypes', v, NO_EXERCISE);
+    applyExerciseVis();
+  }, 'Exercise type'));
+  sec.appendChild(exFreqW);
+  sec.appendChild(exNotesW);
+  return sec;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   SUPPLY SUGGESTIONS
+   Reads the assessment so a nurse is less likely to arrive without
+   something. Advisory only — every line stays editable on step 5.
+   ───────────────────────────────────────────────────────────────── */
+function suggestSupplies() {
+  const f = state.form;
+  const kits = { 'Disposable kit': 1 };
+  const cons = [];
+
+  if (['Full assistance','Bed bath only'].includes(f.bathing)) {
+    kits['Bathing kit'] = 1;
+    kits['Grooming kit'] = 1;
+  }
+  if ((f.continence || []).includes('Uses diaper')) {
+    kits['Diaper kit (L/XL/M)'] = 1;
+    cons.push('Under pad');
+  }
+  if ((f.continence || []).includes('Colostomy')) {
+    kits['Colostomy kit'] = 1;
+  }
+  if (f.feeding === 'NG tube (Ryles)') {
+    kits['Ryles tube feed kit'] = 1;
+  }
+  if (f.wounds && f.wounds !== 'None') {
+    kits['Small dressing kit'] = 1;
+    cons.push('Betadine solution', 'Dressing set with forceps',
+              'Sterile gloves', 'Normal saline 100ml');
+  }
+  if (f.skin === 'Pressure sore present') cons.push('Under pad');
+  if ((f.vitals || []).includes('Blood sugar')) cons.push('Alcohol swab');
+
+  return { kits, consumables: [...new Set(cons)] };
+}
+
+/* Step index 4. Named for the step number the team sees, not the array index. */
+function renderStep5() {
+  // Re-seed on every visit until the nurse edits something, so the suggestion keeps
+  // up with an assessment that changed after this step was first opened. Once it has
+  // been touched it is theirs, and nothing here writes to it again.
+  if (!state.suppliesTouched) {
+    const sug = suggestSupplies();
+    state.form = {...state.form, kits: sug.kits, consumables: sug.consumables};
+  }
+
+  const f = state.form;
+  const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
+  sec.appendChild(renderSectionHead('Supplies and contacts', 'What the nurse needs to bring and what is already at home'));
+
+  sec.appendChild(renderChips(EQUIPMENT, 'equipment', v => tog('equipment', v),
+    "Equipment already in the patient's home"));
+
+  /* ── Kits ─────────────────────────────────────────────────────── */
+  const kitsBlock = h('div', s({paddingTop:20, borderTop:`1px solid ${B.border}`}));
+  if (!state.suppliesTouched) {
+    kitsBlock.appendChild(h('div', s({fontSize:12, color:B.muted, marginBottom:10}),
+      'Pre-selected from the assessment — review and adjust.'));
+  }
+  kitsBlock.appendChild(h('div', s({fontSize:13, fontWeight:600, color:B.navy}), 'Kits required'));
+  kitsBlock.appendChild(h('div', s({fontSize:12, color:B.muted, marginBottom:14, lineHeight:'1.45'}),
+    'One of each kit is included in the package. Additional kits of the same type are charged separately.'));
+
+  const summary = h('div', s({
+    padding:'10px 14px', borderRadius:8, background:B.bg,
+    border:`1px solid ${B.border}`, marginTop:4, fontSize:13
+  }));
+
+  function paintSummary() {
+    const kits = state.form.kits || {};
+    const names = Object.keys(kits);
+    const included = names.length;
+    const extra = names.reduce((n, k) => n + (kits[k] - 1), 0);
+    summary.textContent = '';
+    summary.appendChild(document.createTextNode(
+      `${included + extra} kits selected · ${included} included · `));
+    summary.appendChild(h('span', s({
+      fontWeight: extra > 0 ? 700 : 400,
+      color: extra > 0 ? '#92400E' : B.muted
+    }), `${extra} chargeable`));
+  }
+
+  KITS.forEach(kit => {
+    const card = h('div', s({padding:'12px 14px', borderRadius:10, marginBottom:10, cursor:'pointer'}));
+
+    const top = h('div', s({display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10}));
+    const nameEl = h('div', s({fontSize:14, fontWeight:600}), kit.name);
+    const addEl = h('div', s({fontSize:13, color:B.blue, fontWeight:600, flexShrink:0}), '+ Add');
+    top.appendChild(nameEl);
+    top.appendChild(addEl);
+    card.appendChild(top);
+    card.appendChild(h('div', s({fontSize:12, color:B.muted, lineHeight:'1.45', marginTop:4}), kit.purpose));
+
+    const stepBtn = label => h('button', {type:'button', style:{
+      width:30, height:30, borderRadius:15, border:`1px solid ${B.border}`,
+      background:'white', color:B.navy, fontSize:18, lineHeight:'1',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      flexShrink:0, padding:0, cursor:'pointer'
+    }}, label);
+
+    const minus = stepBtn('−');
+    const plus  = stepBtn('+');
+    const qtyEl = h('div', s({fontSize:15, fontWeight:700, color:B.navy, minWidth:20, textAlign:'center'}));
+    const tag   = h('div', s({marginLeft:'auto'}));
+    const qtyRow = h('div', s({marginTop:12, display:'flex', alignItems:'center', gap:12}),
+      minus, qtyEl, plus, tag);
+    card.appendChild(qtyRow);
+
+    // Repaint this one card in place — a full render() would flash the whole form
+    function paint() {
+      const qty = (state.form.kits || {})[kit.name];
+      const sel = qty != null;
+      card.style.border = `1.5px solid ${sel ? B.blue : B.border}`;
+      card.style.background = sel ? B.blueLt : 'white';
+      nameEl.style.color = sel ? B.navy : B.text;
+      addEl.style.display = sel ? 'none' : 'block';
+      qtyRow.style.display = sel ? 'flex' : 'none';
+      if (sel) {
+        qtyEl.textContent = String(qty);
+        const chargeable = qty > 1;
+        tag.textContent = '';
+        tag.appendChild(h('span', s({
+          fontSize:11, fontWeight:600,
+          color: chargeable ? '#92400E' : '#166534',
+          background: chargeable ? '#FEF3C7' : '#DCFCE7',
+          padding:'4px 10px', borderRadius:20
+        }), chargeable ? `+${qty - 1} chargeable` : 'Included'));
+      }
+      paintSummary();
+    }
+
+    function setQty(n) {
+      const kits = {...(state.form.kits || {})};
+      if (n == null) delete kits[kit.name]; else kits[kit.name] = n;
+      state.form = {...state.form, kits};
+      state.suppliesTouched = true;
+      paint();
+    }
+
+    card.addEventListener('click', () => {
+      if ((state.form.kits || {})[kit.name] == null) setQty(1);
+    });
+    minus.addEventListener('click', e => {
+      e.stopPropagation();
+      const qty = (state.form.kits || {})[kit.name];
+      if (qty == null) return;
+      setQty(qty <= 1 ? null : qty - 1);   // stepping below one removes the kit
+    });
+    plus.addEventListener('click', e => {
+      e.stopPropagation();
+      const qty = (state.form.kits || {})[kit.name] || 0;
+      setQty(Math.min(MAX_KIT_QTY, qty + 1));
+    });
+
+    paint();
+    kitsBlock.appendChild(card);
+  });
+
+  kitsBlock.appendChild(summary);
+  sec.appendChild(kitsBlock);
+
+  /* ── Consumables and contacts ─────────────────────────────────── */
+  sec.appendChild(renderChips(CONSUMABLES, 'consumables', v => {
+    tog('consumables', v);
+    state.suppliesTouched = true;
+  }, 'Consumables required'));
+  sec.appendChild(renderField('Additional supplies or quantity changes',
+    renderTextarea(f.supplyNotes, v => upd('supplyNotes', v),
+      'Anything not listed above, or different quantities needed for this patient', 2)));
 
   const emergencyGrid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:20, marginBottom:28}));
   emergencyGrid.appendChild(renderField('Emergency contact name', renderInput(f.emergencyName, v => upd('emergencyName', v), 'e.g. Ravi Sharma')));
@@ -459,7 +712,7 @@ function renderForm() {
   wrap.appendChild(renderStepBar());
 
   const content = h('div', s({flex:1, paddingTop:8, paddingBottom:10}));
-  const panel = {0:renderStep0, 1:renderStep1, 2:renderStep2, 3:renderStep3}[state.step]?.();
+  const panel = {0:renderStep0, 1:renderStep1, 2:renderStep2, 3:renderStep3, 4:renderStep5}[state.step]?.();
   if (panel) { panel.classList.add('fade-up'); content.appendChild(panel); }
   wrap.appendChild(content);
 
