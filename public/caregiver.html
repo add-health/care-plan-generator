@@ -195,6 +195,7 @@ let state = {
     emergencyName:'', emergencyPhone:'',
     doctorName:'', doctorPhone:'', familyNotes:''
   },
+  plan: null,
   error: '',
   notice: '',
   // Set the moment a kit or consumable is edited by hand. Emptiness cannot stand in
@@ -793,12 +794,462 @@ function renderForm() {
 }
 
 /* ─────────────────────────────────────────────────────────────────
-   GENERATION — placeholder until the AI stage is built
+   GENERATION
+   Claude writes the narrative — the routine, the explanations, the
+   monitoring thresholds, the safety and contact advice. Everything the
+   nurse already recorded (exercise, kits, consumables, which vitals) is
+   filled in from the form instead of being asked for again: having a
+   model retype structured data it was just handed is a chance to get it
+   wrong for no benefit.
    ───────────────────────────────────────────────────────────────── */
-function generate() {
-  console.log('Caregiver care plan form state:', state.form);
-  state.notice = 'Form captured. Care plan generation is not built yet — the full assessment is in the browser console.';
+const API_ENDPOINT = '/generate-plan';
+
+// Roughly how many visits the record sheet should be ruled for
+const TIER_SESSIONS = {
+  'Basic — 2 hours': 12, 'Medium — 4 hours': 12, 'Advanced — 8 hours': 10,
+  'Max — 12 hours': 10, 'Max+ — 24 hours': 8, 'Bathing assistance only': 15
+};
+
+// How many parts of the day the routine should be split into
+const TIER_BLOCKS = {
+  'Basic — 2 hours': 1, 'Medium — 4 hours': 2, 'Advanced — 8 hours': 4,
+  'Max — 12 hours': 4, 'Max+ — 24 hours': 5, 'Bathing assistance only': 1
+};
+
+function buildSupplies() {
+  const kits = Object.entries(state.form.kits || {}).map(([name, qty]) => {
+    const k = KITS.find(x => x.name === name);
+    const extra = qty - 1;
+    return {
+      name,
+      quantity: qty,
+      purpose: k ? k.purpose : '',
+      billing: extra > 0 ? `1 included, ${extra} chargeable` : 'Included'
+    };
+  });
+  return { kits, consumables: [...(state.form.consumables || [])] };
+}
+
+function buildExercise(precautions) {
+  const f = state.form;
+  return {
+    types: [...(f.exerciseTypes || [])],
+    frequency: f.exerciseFrequency || '',
+    instructions: f.exerciseNotes || '',
+    precautions: precautions || ''
+  };
+}
+
+async function generate() {
+  const f = state.form;
+  const proto = CARE_PROTOCOLS.find(p => p.care_type === f.careType);
+  if (!proto) { state.error = 'Please choose the type of care needed first'; render(); return; }
+
+  state.screen = 'loading'; state.error = ''; state.notice = ''; render();
+
+  const blocks = TIER_BLOCKS[f.serviceTier] || 3;
+  const vitals = (f.vitals || []).length ? f.vitals : ['Blood pressure', 'Pulse', 'Temperature'];
+  const restAdvised = (f.exerciseTypes || []).includes(NO_EXERCISE);
+
+  const systemPrompt = `You are a senior nurse at Lifetime Health, Bangalore, writing a home care plan.
+
+WHO READS THIS. The patient and their family. It is printed and kept in the patient's home, so a
+replacement nurse also reads it — but it is written FOR the patient, not for staff.
+
+TONE RULES — these are not optional:
+- Address the patient directly as "you" and "your".
+- Say "your nurse". Never say "caregiver", "staff", "attendant", or "the patient".
+- Plain English. No clinical shorthand, no abbreviations the family would not know. Write
+  "pressure sore" not "decubitus ulcer", "breathing trouble" not "respiratory distress".
+- Explain the reason for things, calmly. Do not frighten, and do not be vague either.
+- Indian English spelling and idiom. Rupee amounts never appear in this document.
+
+CRITICAL: Respond ONLY with valid JSON. No markdown code fences. No commentary. Pure JSON.
+
+Produce exactly this shape:
+{
+  "care_summary": "2-3 sentences addressed to the patient, saying what care they are getting and why",
+  "daily_routine": [
+    {
+      "block": "Morning",
+      "time_range": "7:00 - 10:00 am",
+      "tasks": [
+        { "time": "7:00 am", "task": "Short task name", "note": "One sentence saying what happens and any detail that matters" }
+      ]
+    }
+  ],
+  "care_explained": [
+    { "task": "Task name", "why": "2-3 sentences on what goes wrong without it", "how": "1-2 sentences on what your nurse actually does" }
+  ],
+  "monitoring": [
+    { "measure": "Blood pressure", "when": "Morning and afternoon", "normal_range": "Below 140/90", "call_if": "Above 160/100 or below 90/60" }
+  ],
+  "safety_at_home": ["plain-language safety point", "..."],
+  "contact_criteria": ["Call your nurse if ...", "..."],
+  "exercise_precautions": "what to stop for, one or two sentences",
+  "session_count": 10
+}
+
+RULES:
+- daily_routine must contain exactly ${blocks} block${blocks === 1 ? '' : 's'}, matching a
+  ${f.serviceTier || 'standard'} engagement. Each block gets 4 to 5 tasks. Times must be real clock
+  times inside the block's own range, in order, and must not overlap between blocks.
+- care_explained: 5 to 6 items, drawn from the core tasks of this care type and from what the
+  assessment below actually shows. This is the section a replacement nurse relies on, so the "why"
+  must give the real reason, not a platitude.
+- monitoring: one row for each of these measures and no others: ${vitals.join(', ')}.
+  normal_range and call_if must be real clinical thresholds appropriate to this patient's age and
+  conditions. call_if is what makes the family pick up the phone, so be specific and numeric.
+- safety_at_home: exactly 5 items, specific to this patient's mobility, equipment and home risks.
+- contact_criteria: exactly 5 items, each starting with "Call".
+- exercise_precautions: ${restAdvised
+    ? 'rest has been advised, so return an empty string for this field.'
+    : 'what would make your nurse stop the exercises for this particular patient.'}
+- session_count: a whole number between 6 and 15 for how many visits the record sheet should be
+  ruled for, based on this care type and service tier.
+- Never name an individual clinician. Never promise a cure or a timeline you cannot support.
+- If the assessment shows a wound, a tube, a catheter or a colostomy, the routine and the
+  explanations must both cover it.
+
+CARE ARCHETYPE — use this as the clinical backbone, adapted to the assessment:
+${JSON.stringify(proto, null, 2)}`;
+
+  const userMessage = `PATIENT ASSESSMENT
+
+Name: ${f.name || 'Patient'} | Age: ${f.age || 'not recorded'} | Gender: ${f.gender} | Zone: ${f.zone}
+Care type: ${f.careType}
+Service tier: ${f.serviceTier}
+Care starts: ${f.startDate || 'not recorded'}
+Assessed by: ${f.assessedBy || 'not recorded'}
+${f.careType === 'Post-surgical recovery' ? `Surgery or discharge date: ${f.surgeryDate || 'not recorded'}\n` : ''}
+Medical conditions: ${(f.conditions || []).length ? f.conditions.join(', ') : 'None recorded'}${(f.conditions || []).includes('Other') && f.conditionsOther ? ` (other: ${f.conditionsOther})` : ''}
+Allergies: ${f.allergies || 'None recorded'}
+
+DEPENDENCY
+Mobility: ${f.mobility}
+Transfers: ${f.transfers}
+Bathing: ${f.bathing}
+Continence: ${(f.continence || []).length ? f.continence.join(', ') : 'not recorded'}
+Feeding: ${f.feeding}
+Awareness and communication: ${f.cognition}
+Skin: ${f.skin}
+Wounds: ${f.wounds}${f.wounds !== 'None' && f.woundLocation ? ` at ${f.woundLocation}` : ''}
+
+DAILY NEEDS
+Fall risk: ${f.fallRisk}
+Vitals to monitor: ${vitals.join(', ')}
+Medication support: ${f.medication}${f.medication === 'Yes' && f.medicationTimes ? ` — ${f.medicationTimes}` : ''}
+Exercise: ${(f.exerciseTypes || []).length ? f.exerciseTypes.join(', ') : 'none recorded'}${f.exerciseFrequency ? `, ${f.exerciseFrequency}` : ''}
+Exercise instructions from the assessor: ${f.exerciseNotes || 'none'}
+Equipment already at home: ${(f.equipment || []).length ? f.equipment.join(', ') : 'none recorded'}
+Family notes: ${f.familyNotes || 'none'}
+
+Today's date: ${new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+
+Write the care plan as JSON:`;
+
+  try {
+    const res = await fetch(API_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ system: systemPrompt, messages: [{ role: 'user', content: userMessage }] })
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Server error ${res.status}`);
+    }
+
+    const data = await res.json();
+    const text = data.content?.find(b => b.type === 'text')?.text || '';
+    const clean = text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    // Clamp to the same 6-15 range the prompt asks for, so a stray value cannot
+    // silently produce a record sheet nobody expected. 15 also keeps it to one page.
+    const sessions = Math.min(15, Math.max(6,
+      parseInt(parsed.session_count, 10) || TIER_SESSIONS[f.serviceTier] || 10));
+
+    state.plan = {
+      care_summary:        parsed.care_summary || '',
+      service_tier:        f.serviceTier,
+      daily_routine:       parsed.daily_routine || [],
+      care_explained:      parsed.care_explained || [],
+      exercise_plan:       buildExercise(parsed.exercise_precautions),
+      monitoring:          parsed.monitoring || [],
+      safety_at_home:      parsed.safety_at_home || [],
+      contact_criteria:    parsed.contact_criteria || [],
+      escalation_pathway:  'Attending nurse → Lifetime Health clinical team',
+      supplies:            buildSupplies(),
+      session_count:       sessions,
+      _form:               f,
+      _generatedAt:        new Date().toLocaleString('en-IN', {
+                             day: 'numeric', month: 'short', year: 'numeric',
+                             hour: '2-digit', minute: '2-digit'
+                           })
+    };
+    state.screen = 'plan';
+
+  } catch (err) {
+    console.error('Generation error:', err);
+    state.error = err.message || 'Generation failed. Check your connection and try again.';
+    state.screen = 'form';
+  }
+
   render();
+}
+
+function renderLoading() {
+  const f = state.form;
+  const wrap = h('div', s({minHeight:'100vh', background:'linear-gradient(160deg, #0F2348 0%, #1A2744 50%, #1E2D5A 100%)', display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', padding:'40px 24px', textAlign:'center', position:'relative'}));
+  const inner = h('div', s({display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center', width:'100%', maxWidth:320, margin:'0 auto'}));
+
+  const ring = h('div', s({width:64, height:64, borderRadius:'50%', border:'4px solid rgba(255,255,255,0.08)', borderTopColor:'#3B6FE8', borderRightColor:'#3B6FE8', marginBottom:32, flexShrink:0}));
+  ring.classList.add('spin');
+  inner.appendChild(ring);
+
+  inner.appendChild(h('div', s({color:'#FFFFFF', fontSize:24, fontWeight:700, marginBottom:12, letterSpacing:'0.3px', textAlign:'center'}), 'Building the care plan'));
+  inner.appendChild(h('div', s({color:'#93C5FD', fontSize:15, lineHeight:'1.5', marginBottom:36, fontWeight:400, textAlign:'center', maxWidth:280}),
+    `Personalising ${f.careType || 'care'} for ${f.name || 'your patient'}`));
+
+  const stepsBox = h('div', s({display:'flex', flexDirection:'column', gap:14, alignItems:'flex-start', padding:'20px 24px', background:'rgba(255,255,255,0.04)', border:'1px solid rgba(255,255,255,0.08)', borderRadius:12, marginBottom:28}));
+  ['Reading the assessment', 'Building the daily routine', 'Explaining each task', 'Setting monitoring limits'].forEach(label => {
+    const row = h('div', s({display:'flex', alignItems:'center', gap:12}));
+    row.appendChild(h('div', s({width:8, height:8, borderRadius:'50%', background:'#3B6FE8', flexShrink:0, boxShadow:'0 0 12px rgba(59,111,232,0.6)'})));
+    row.appendChild(h('span', s({color:'#DBEAFE', fontSize:14, fontWeight:400, letterSpacing:'0.1px'}), label));
+    stepsBox.appendChild(row);
+  });
+  inner.appendChild(stepsBox);
+
+  const disclaimer = h('div', s({display:'flex', alignItems:'center', gap:10, padding:'12px 16px', background:'rgba(217,119,6,0.12)', border:'1px solid rgba(217,119,6,0.3)', borderRadius:10, maxWidth:300}));
+  disclaimer.appendChild(h('span', s({fontSize:16, flexShrink:0, lineHeight:'1'}), '⚠'));
+  disclaimer.appendChild(h('div', s({color:'#FCD34D', fontSize:12, fontWeight:500, lineHeight:'1.5', textAlign:'left'}),
+    'Please do not close this window. Generation takes 20–30 seconds.'));
+  inner.appendChild(disclaimer);
+
+  wrap.appendChild(inner);
+  wrap.appendChild(h('div', s({marginTop:'auto', paddingTop:40, color:'rgba(147,197,253,0.4)', fontSize:11, fontWeight:500, letterSpacing:'0.5px', textAlign:'center'}), 'Lifetime Health  ·  lifetimehealth.in'));
+  return wrap;
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   PLAN SCREEN — on-screen review before the PDF is produced
+   ───────────────────────────────────────────────────────────────── */
+function planSection(title, bg) {
+  const bar = h('div', s({background:bg || B.navy, borderRadius:8, padding:'9px 14px', marginBottom:12, marginTop:22}));
+  bar.appendChild(h('div', s({color:'white', fontSize:12, fontWeight:700, letterSpacing:'0.6px'}), title));
+  return bar;
+}
+
+function renderPlan() {
+  const p = state.plan, f = p._form;
+  const wrap = h('div', s({background:B.bg, minHeight:'100vh'}));
+
+  // Header
+  const hdr = h('div', s({background:'linear-gradient(135deg, #1A2744 0%, #1E2D5A 100%)', padding:'18px 20px 22px 20px'}));
+  const top = h('div', s({display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:14}));
+  top.appendChild(h('div', s({color:'white', fontSize:16, fontWeight:700}), 'Lifetime Health'));
+  top.appendChild(h('div', s({background:'rgba(255,255,255,0.1)', color:'#93C5FD', fontSize:10, fontWeight:600, padding:'4px 10px', borderRadius:20, letterSpacing:'0.8px'}), 'CARE PLAN'));
+  hdr.appendChild(top);
+  hdr.appendChild(h('div', s({color:'white', fontSize:22, fontWeight:700, marginBottom:4}), f.name || 'Patient'));
+  hdr.appendChild(h('div', s({color:'#93C5FD', fontSize:13, marginBottom:10}),
+    `${f.age ? f.age + 'y · ' : ''}${f.gender} · ${f.zone}`));
+  const tag = h('div', s({display:'inline-block', background:B.navy2, color:B.blueLt, fontSize:11, fontWeight:600, padding:'5px 11px', borderRadius:20}), f.careType);
+  hdr.appendChild(tag);
+  hdr.appendChild(h('div', s({color:'#64748B', fontSize:11, marginTop:10}), `Generated ${p._generatedAt}`));
+  wrap.appendChild(hdr);
+
+  const body = h('div', s({padding:'4px 16px 24px 16px'}));
+
+  // Stat pills
+  const pills = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginTop:16}));
+  [['SERVICE', f.serviceTier, B.blueLt, B.blue], ['ASSESSED BY', f.assessedBy || '—', 'white', B.navy]]
+    .forEach(([lbl, val, bg, vc]) => {
+      const pill = h('div', s({background:bg, borderRadius:10, padding:'11px 13px', border:`1px solid ${B.border}`}));
+      pill.appendChild(h('div', s({fontSize:9, color:B.muted, fontWeight:600, letterSpacing:'0.5px', marginBottom:4}), lbl));
+      pill.appendChild(h('div', s({fontSize:13, fontWeight:700, color:vc}), val));
+      pills.appendChild(pill);
+    });
+  body.appendChild(pills);
+
+  // Your care
+  body.appendChild(planSection('YOUR CARE', B.navy));
+  const sum = h('div', s({background:B.blueLt, borderLeft:`3px solid ${B.blue}`, borderRadius:8, padding:'12px 14px', fontSize:13, color:B.navy, lineHeight:'1.55'}), p.care_summary);
+  body.appendChild(sum);
+
+  // Daily routine
+  if ((p.daily_routine || []).length) {
+    body.appendChild(planSection('YOUR DAILY ROUTINE', B.blue));
+    p.daily_routine.forEach(block => {
+      const card = h('div', s({border:`1px solid ${B.border}`, borderRadius:10, overflow:'hidden', marginBottom:12, background:'white'}));
+      const bh = h('div', s({background:B.blue, padding:'8px 13px', display:'flex', justifyContent:'space-between', alignItems:'center'}));
+      bh.appendChild(h('div', s({color:'white', fontSize:13, fontWeight:700}), block.block || ''));
+      bh.appendChild(h('div', s({color:B.blueLt2, fontSize:11}), block.time_range || ''));
+      card.appendChild(bh);
+      (block.tasks || []).forEach((t, i) => {
+        const row = h('div', s({display:'flex', gap:10, padding:'9px 13px', background: i % 2 ? B.bg : 'white'}));
+        row.appendChild(h('div', s({fontSize:11, fontWeight:700, color:B.navy, minWidth:52, flexShrink:0}), t.time || ''));
+        const col = h('div', s({flex:'1'}));
+        col.appendChild(h('div', s({fontSize:12.5, fontWeight:600, color:B.text, marginBottom:2}), t.task || ''));
+        if (t.note) col.appendChild(h('div', s({fontSize:11.5, color:B.muted, lineHeight:'1.45'}), t.note));
+        row.appendChild(col);
+        card.appendChild(row);
+      });
+      body.appendChild(card);
+    });
+  }
+
+  // Care explained
+  if ((p.care_explained || []).length) {
+    body.appendChild(planSection('YOUR CARE EXPLAINED', B.navy));
+    p.care_explained.forEach(item => {
+      const card = h('div', s({borderBottom:`1px solid ${B.border}`, paddingBottom:12, marginBottom:12}));
+      card.appendChild(h('div', s({fontSize:14, fontWeight:700, color:B.navy, marginBottom:6}), item.task || ''));
+      card.appendChild(h('div', s({fontSize:9.5, fontWeight:700, color:B.blue, letterSpacing:'0.5px', marginBottom:3}), 'WHY THIS MATTERS'));
+      card.appendChild(h('div', s({fontSize:12.5, color:B.text, lineHeight:'1.5', marginBottom:8}), item.why || ''));
+      card.appendChild(h('div', s({fontSize:9.5, fontWeight:700, color:B.muted, letterSpacing:'0.5px', marginBottom:3}), 'HOW IT IS DONE'));
+      card.appendChild(h('div', s({fontSize:12.5, color:B.muted, lineHeight:'1.5'}), item.how || ''));
+      body.appendChild(card);
+    });
+  }
+
+  // Exercise
+  const ex = p.exercise_plan || {};
+  body.appendChild(planSection('EXERCISE AND MOVEMENT', B.blue));
+  if ((ex.types || []).includes(NO_EXERCISE)) {
+    body.appendChild(h('div', s({background:'#FEF3C7', borderLeft:'3px solid #D97706', borderRadius:8, padding:'12px 14px', fontSize:12.5, color:'#92400E', lineHeight:'1.5'}),
+      'Rest is advised for now. Your nurse will not carry out exercises until the clinical team reviews this.'));
+  } else {
+    const chips = h('div', s({display:'flex', flexWrap:'wrap', gap:6, marginBottom:10}));
+    (ex.types || []).forEach(t => chips.appendChild(h('div', s({background:B.blueLt, color:B.blue, fontSize:11, fontWeight:600, padding:'5px 10px', borderRadius:20}), t)));
+    body.appendChild(chips);
+    if (ex.frequency) {
+      const fb = h('div', s({background:B.blueLt, borderRadius:8, padding:'9px 13px', marginBottom:10, display:'flex', gap:10}));
+      fb.appendChild(h('div', s({fontSize:12, color:B.muted, fontWeight:600}), 'How often:'));
+      fb.appendChild(h('div', s({fontSize:12.5, color:B.blue, fontWeight:700}), ex.frequency));
+      body.appendChild(fb);
+    }
+    if (ex.instructions) body.appendChild(h('div', s({border:`1px solid ${B.border}`, borderRadius:8, padding:'12px 14px', fontSize:12.5, color:B.text, lineHeight:'1.55', background:'white', marginBottom:10}), ex.instructions));
+    if (ex.precautions) body.appendChild(h('div', s({background:'#FEF3C7', borderLeft:'3px solid #D97706', borderRadius:8, padding:'11px 13px', fontSize:12, color:'#92400E', lineHeight:'1.5'}), '! ' + ex.precautions));
+  }
+
+  // Monitoring
+  if ((p.monitoring || []).length) {
+    body.appendChild(planSection('WHAT WE MONITOR', B.navy));
+    p.monitoring.forEach((m, i) => {
+      const card = h('div', s({background: i % 2 ? B.bg : 'white', border:`1px solid ${B.border}`, borderRadius:8, padding:'10px 13px', marginBottom:8}));
+      card.appendChild(h('div', s({fontSize:12.5, fontWeight:700, color:B.navy, marginBottom:4}), m.measure || ''));
+      const grid = h('div', s({display:'grid', gridTemplateColumns:'auto 1fr', gap:'3px 10px', fontSize:11.5}));
+      [['When', m.when, B.muted], ['Normal', m.normal_range, B.muted], ['Call us if', m.call_if, B.red]].forEach(([k, v, c]) => {
+        grid.appendChild(h('div', s({color:B.muted, fontWeight:600}), k));
+        grid.appendChild(h('div', s({color:c, lineHeight:'1.4'}), v || '—'));
+      });
+      card.appendChild(grid);
+      body.appendChild(card);
+    });
+  }
+
+  // Safety
+  if ((p.safety_at_home || []).length) {
+    body.appendChild(planSection('STAYING SAFE AT HOME', B.blue));
+    p.safety_at_home.forEach(sfy => {
+      const row = h('div', s({display:'flex', gap:9, background:B.blueLt, borderRadius:8, padding:'10px 13px', marginBottom:7}));
+      row.appendChild(h('div', s({color:B.blue, fontWeight:700, fontSize:12, flexShrink:0}), '✓'));
+      row.appendChild(h('div', s({fontSize:12.5, color:B.text, lineHeight:'1.45'}), sfy));
+      body.appendChild(row);
+    });
+  }
+
+  // When to call
+  if ((p.contact_criteria || []).length) {
+    body.appendChild(planSection('WHEN TO CALL US', B.navy));
+    p.contact_criteria.forEach(cc => {
+      const row = h('div', s({display:'flex', gap:9, background:B.bg, borderRadius:8, padding:'10px 13px', marginBottom:6}));
+      row.appendChild(h('div', s({color:B.blue, fontSize:14, lineHeight:'1', flexShrink:0}), '•'));
+      row.appendChild(h('div', s({fontSize:12.5, color:B.text, lineHeight:'1.45'}), cc));
+      body.appendChild(row);
+    });
+    const esc = h('div', s({background:B.blueLt, borderRadius:8, padding:'10px 13px', marginTop:8, display:'flex', gap:8, flexWrap:'wrap'}));
+    esc.appendChild(h('div', s({fontSize:12, color:B.muted, fontWeight:600}), 'Escalation:'));
+    esc.appendChild(h('div', s({fontSize:12, color:B.navy, fontWeight:700}), p.escalation_pathway));
+    body.appendChild(esc);
+  }
+
+  // Supplies
+  const sup = p.supplies || {};
+  if ((sup.kits || []).length || (sup.consumables || []).length) {
+    body.appendChild(planSection('SUPPLIES FOR YOUR CARE', B.blue));
+    (sup.kits || []).forEach(k => {
+      const card = h('div', s({border:`1px solid ${B.border}`, borderRadius:8, padding:'11px 13px', marginBottom:8, background:'white'}));
+      const kh = h('div', s({display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, marginBottom:4}));
+      const left = h('div', s({display:'flex', gap:7, alignItems:'baseline'}));
+      left.appendChild(h('div', s({fontSize:13, fontWeight:700, color:B.navy}), k.name));
+      left.appendChild(h('div', s({fontSize:12, fontWeight:700, color:B.blue}), '×' + k.quantity));
+      kh.appendChild(left);
+      const chargeable = /chargeable/i.test(k.billing || '');
+      kh.appendChild(h('div', s({fontSize:10, fontWeight:700, padding:'4px 9px', borderRadius:20, flexShrink:0,
+        background: chargeable ? '#FEF3C7' : '#DCFCE7', color: chargeable ? '#92400E' : '#166534'}), k.billing));
+      card.appendChild(kh);
+      if (k.purpose) card.appendChild(h('div', s({fontSize:11.5, color:B.muted, lineHeight:'1.45'}), k.purpose));
+      body.appendChild(card);
+    });
+    if ((sup.consumables || []).length) {
+      body.appendChild(h('div', s({fontSize:9.5, fontWeight:700, color:B.muted, letterSpacing:'0.5px', marginTop:10, marginBottom:4}), 'ALSO PROVIDED'));
+      body.appendChild(h('div', s({fontSize:12, color:B.muted, lineHeight:'1.5'}), sup.consumables.join(', ')));
+    }
+  }
+
+  // Actions
+  const acts = h('div', s({marginTop:26}));
+  const btnPdf = h('button', {type:'button', style:{width:'100%', padding:'14px 0', borderRadius:10, border:'none', background:B.navy, color:'white', fontSize:15, fontWeight:700, cursor:'pointer', marginBottom:10}}, '⬇  Download care plan PDF');
+  btnPdf.addEventListener('click', async () => {
+    const original = btnPdf.textContent;
+    btnPdf.textContent = 'Generating PDF...'; btnPdf.style.opacity = '0.7';
+    try {
+      const res = await fetch('/download-caregiver-pdf', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          patient: {
+            name: f.name, age: f.age, gender: f.gender, zone: f.zone,
+            care_type: f.careType, service_tier: f.serviceTier,
+            start_date: f.startDate, assessed_by: f.assessedBy
+          },
+          plan: p
+        })
+      });
+      if (!res.ok) throw new Error('PDF generation failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const nm = (f.name || 'Patient').replace(/\s+/g, '_');
+      const ct = (f.careType || 'CarePlan').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+      a.download = `${nm}_${ct}_${new Date().toISOString().slice(0, 10)}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      btnPdf.textContent = '✓  Downloaded';
+      setTimeout(() => { btnPdf.textContent = original; btnPdf.style.opacity = '1'; }, 2200);
+    } catch (err) {
+      console.error(err);
+      btnPdf.textContent = '✗  Failed — try again';
+      btnPdf.style.background = B.red;
+      setTimeout(() => { btnPdf.textContent = original; btnPdf.style.background = B.navy; btnPdf.style.opacity = '1'; }, 3000);
+    }
+  });
+  acts.appendChild(btnPdf);
+
+  const row = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}));
+  const btnNew = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:14, fontWeight:500, cursor:'pointer'}}, 'New assessment');
+  btnNew.addEventListener('click', () => { window.location.reload(); });
+  const btnEdit = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.blue, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, 'Edit & regenerate');
+  btnEdit.addEventListener('click', () => { state.screen = 'form'; state.step = 0; render(); });
+  row.appendChild(btnNew); row.appendChild(btnEdit);
+  acts.appendChild(row);
+  body.appendChild(acts);
+
+  wrap.appendChild(body);
+  return wrap;
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -807,7 +1258,11 @@ function generate() {
 function render() {
   const app = document.getElementById('app');
   app.innerHTML = '';
-  app.appendChild(renderForm());
+  let screen;
+  if (state.screen === 'loading') screen = renderLoading();
+  else if (state.screen === 'plan' && state.plan) screen = renderPlan();
+  else screen = renderForm();
+  app.appendChild(screen);
   window.scrollTo(0, 0);
 }
 

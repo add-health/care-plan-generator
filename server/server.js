@@ -199,6 +199,55 @@ app.post('/download-pdf', async (req, res) => {
   }
 });
 
+// ── Caregiver PDF download (separate generator, patient-facing document) ──
+app.post('/download-caregiver-pdf', async (req, res) => {
+  const { patient, plan } = req.body;
+
+  const timestamp = new Date().toISOString().slice(0, 10);
+  const safeName = (patient.name || 'Patient').replace(/\s+/g, '_');
+  const safeType = (patient.care_type || 'CarePlan').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 20);
+  const filename = `${safeName}_${safeType}_${timestamp}.pdf`;
+
+  const tempDir = path.join(__dirname, '..', 'temp');
+  if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir);
+  const outputPath = path.join(tempDir, filename);
+
+  try {
+    const patientForPdf = {
+      name:         patient.name,
+      age:          patient.age,
+      gender:       patient.gender,
+      zone:         patient.zone,
+      care_type:    patient.care_type,
+      service_tier: patient.service_tier,
+      start_date:   patient.start_date,
+      assessed_by:  patient.assessed_by,
+      date:         'Generated ' + new Date().toLocaleDateString('en-GB', {
+                      day: 'numeric', month: 'short', year: 'numeric'
+                    })
+    };
+
+    await new Promise((resolve, reject) => {
+      const shell = new PythonShell(
+        path.join(__dirname, '..', 'pdf-generator', 'generate_caregiver_pdf.py'),
+        {
+          args: ['--json', JSON.stringify({ patient: patientForPdf, plan, output: outputPath })],
+          pythonPath: PYTHON_PATH
+        }
+      );
+      shell.on('error', reject);
+      shell.end((err) => err ? reject(err) : resolve());
+    });
+
+    res.download(outputPath, filename, (err) => {
+      if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
+    });
+  } catch (err) {
+    console.error('Caregiver download error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ── Serve frontend ──────────────────────────────────────────────────
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
