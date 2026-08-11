@@ -109,7 +109,7 @@ const B = {
 
 const ZONES = ['Marathahalli','Mathikere','Kalyan Nagar','Electronic City','Jayanagar','Yelahanka'];
 const SERVICE_TIERS = ['Basic — 2 hours','Medium — 4 hours','Advanced — 8 hours','Max — 12 hours','Max+ — 24 hours','Bathing assistance only'];
-const CONDITIONS = ['Diabetes','High blood pressure','Heart condition / pacemaker','Kidney disease','Cancer',"Parkinson's disease",'Arthritis / joint pain','Spine or back condition','Stroke / paralysis','Breathing condition','Dementia / memory loss','None'];
+const CONDITIONS = ['Diabetes','High blood pressure','Heart condition / pacemaker','Kidney disease','Cancer',"Parkinson's disease",'Arthritis / joint pain','Spine or back condition','Stroke / paralysis','Breathing condition','Dementia / memory loss','Other','None'];
 const MOBILITY   = ['Walks independently','Walks with support','Wheelchair','Bedbound'];
 const TRANSFERS  = ['Independent','Help from 1 person','Help from 2 people','Hoist required'];
 const BATHING    = ['Independent','Needs some help','Full assistance','Bed bath only'];
@@ -184,7 +184,7 @@ let state = {
   form: {
     name:'', age:'', gender:'Female', zone:'Jayanagar',
     serviceTier:'', startDate:'', assessedBy:'',
-    careType:'', surgeryDate:'', conditions:[], allergies:'',
+    careType:'', surgeryDate:'', conditions:[], conditionsOther:'', allergies:'',
     mobility:'Walks independently', transfers:'Independent',
     bathing:'Independent', continence:[],
     feeding:'Eats independently', cognition:'Alert and oriented',
@@ -466,7 +466,26 @@ function renderStep1() {
 
   sec.appendChild(careW);
   sec.appendChild(surgeryW);
-  sec.appendChild(renderChips(CONDITIONS, 'conditions', v => tog('conditions', v), 'Medical conditions'));
+  // The chips repaint in place and never call render(), so this has to be toggled by hand
+  const otherWrap = h('div', s({marginBottom:28,
+    display: (f.conditions || []).includes('Other') ? 'block' : 'none'}));
+  otherWrap.appendChild(renderLabel('Please specify'));
+  otherWrap.appendChild(renderInput(f.conditionsOther,
+    v => upd('conditionsOther', v),
+    'e.g. Multiple sclerosis, Guillain-Barré syndrome, motor neurone disease'));
+
+  sec.appendChild(renderChips(CONDITIONS, 'conditions', v => {
+    tog('conditions', v);
+    const hasOther = (state.form.conditions || []).includes('Other');
+    otherWrap.style.display = hasOther ? 'block' : 'none';
+    // Drop any stale free text, or it reaches the plan describing a condition nobody selected
+    if (!hasOther) {
+      state.form.conditionsOther = '';
+      const inp = otherWrap.querySelector('input');
+      if (inp) inp.value = '';
+    }
+  }, 'Medical conditions'));
+  sec.appendChild(otherWrap);
   sec.appendChild(renderField('Allergies',
     renderTextarea(f.allergies, v => upd('allergies', v), 'Any known allergies to medicines, food or materials', 2)));
   return sec;
