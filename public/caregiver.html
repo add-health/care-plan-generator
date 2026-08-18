@@ -109,6 +109,55 @@ const B = {
 
 const ZONES = ['Marathahalli','Mathikere','Kalyan Nagar','Electronic City','Jayanagar','Yelahanka'];
 const SERVICE_TIERS = ['Basic — 2 hours','Medium — 4 hours','Advanced — 8 hours','Max — 12 hours','Max+ — 24 hours','Bathing assistance only'];
+
+/* What each service tier actually is. Everything tier-dependent reads from here
+   rather than testing the tier string in half a dozen places.
+     timeMode  'relative' — the visit can happen at any hour, so the routine
+                describes sequence within the visit, not wall-clock time
+               'clock'    — meals, medicines and sleep are anchored to the day,
+                so absolute times are correct
+     kitAllowance    total kits included per session, across all types
+     staffRestHours  rest the nurse must get inside the engagement
+   Keys must match SERVICE_TIERS exactly, em dashes included. */
+const TIER_CONFIG = {
+  'Bathing assistance only': {
+    hours: 1, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    sections: { routine: 'short', medication: false, exercise: false,
+                monitoring: 'minimal', careExplained: true }
+  },
+  'Basic — 2 hours': {
+    hours: 2, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    sections: { routine: 'short', medication: true, exercise: true,
+                monitoring: 'full', careExplained: true }
+  },
+  'Medium — 4 hours': {
+    hours: 4, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    sections: { routine: 'full', medication: true, exercise: true,
+                monitoring: 'full', careExplained: true }
+  },
+  'Advanced — 8 hours': {
+    hours: 8, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    sections: { routine: 'full', medication: true, exercise: true,
+                monitoring: 'full', careExplained: true }
+  },
+  'Max — 12 hours': {
+    hours: 12, kitAllowance: 3, timeMode: 'clock', staffRestHours: 1,
+    sections: { routine: 'full', medication: true, exercise: true,
+                monitoring: 'full', careExplained: true }
+  },
+  'Max+ — 24 hours': {
+    hours: 24, kitAllowance: 3, timeMode: 'clock', staffRestHours: 6,
+    sections: { routine: 'full', medication: true, exercise: true,
+                monitoring: 'full', careExplained: true }
+  }
+};
+
+const DISPOSABLE_KIT = 'Disposable kit';
+const REST_BLOCK = 'Nurse rest period';
+
+function tierCfg(tier) {
+  return TIER_CONFIG[tier || state.form.serviceTier] || TIER_CONFIG['Medium — 4 hours'];
+}
 const CONDITIONS = ['Diabetes','High blood pressure','Heart condition / pacemaker','Kidney disease','Cancer',"Parkinson's disease",'Arthritis / joint pain','Spine or back condition','Stroke / paralysis','Breathing condition','Dementia / memory loss','Other','None'];
 const MOBILITY   = ['Walks independently','Walks with support','Wheelchair','Bedbound'];
 const TRANSFERS  = ['Independent','Help from 1 person','Help from 2 people','Hoist required'];
@@ -183,13 +232,14 @@ let state = {
   step: 0,
   form: {
     name:'', age:'', gender:'Female', zone:'Jayanagar',
-    serviceTier:'', startDate:'', assessedBy:'',
+    serviceTier:'', startDate:'', assessedBy:'', shiftStart:'08:00',
     careType:'', surgeryDate:'', conditions:[], conditionsOther:'', allergies:'',
     mobility:'Walks independently', transfers:'Independent',
     bathing:'Independent', continence:[],
     feeding:'Eats independently', cognition:'Alert and oriented',
     skin:'Intact', wounds:'None', woundLocation:'',
-    fallRisk:'Low', vitals:[], medication:'No', medicationTimes:'',
+    // medications: [{ time, name, dosage }] — structured, never parsed out of prose
+    fallRisk:'Low', vitals:[], medication:'No', medications:[],
     exerciseTypes:[], exerciseFrequency:'', exerciseNotes:'',
     equipment:[], kits:{}, consumables:[], supplyNotes:'',
     emergencyName:'', emergencyPhone:'',
@@ -435,8 +485,23 @@ function renderStep0() {
   sec.appendChild(grid);
 
   sec.appendChild(renderField('Zone / Branch', renderSelect(f.zone, v => upd('zone', v), ZONES)));
+
+  // Only clock-mode tiers anchor the routine to the day, so only they ask for a start
+  const shiftW = renderField('Shift start time',
+    renderInput(f.shiftStart, v => upd('shiftStart', v), '', 'time'));
+  const applyShiftVis = () => {
+    shiftW.style.display = tierCfg().timeMode === 'clock' ? 'block' : 'none';
+  };
+
   sec.appendChild(renderField('Service tier',
-    renderSelect(f.serviceTier, v => { upd('serviceTier', v); patchNavBtn(); }, SERVICE_TIERS), true));
+    renderSelect(f.serviceTier, v => {
+      upd('serviceTier', v);
+      applyShiftVis();
+      patchNavBtn();
+    }, SERVICE_TIERS), true));
+  sec.appendChild(shiftW);
+  applyShiftVis();
+
   sec.appendChild(renderField('Care start date', renderInput(f.startDate, v => upd('startDate', v), '', 'date')));
   sec.appendChild(renderField('Assessed by', renderInput(f.assessedBy, v => upd('assessedBy', v), 'Senior nurse or assessor name')));
   return sec;
@@ -517,14 +582,59 @@ function renderStep2() {
   return sec;
 }
 
+/* A medicine schedule is the highest-stakes part of this document, so it is
+   captured as rows here rather than left as prose for the model to parse. */
+function renderMedicationRows() {
+  const wrap = h('div', null);
+
+  (state.form.medications || []).forEach((row, i) => {
+    const card = h('div', s({marginBottom:10, padding:'12px 14px',
+      border:`1px solid ${B.border}`, borderRadius:10, background:'white'}));
+
+    const grid = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}));
+    // Text, not a time input — 'after breakfast' has to be allowed
+    grid.appendChild(renderField('Time',
+      renderInput(row.time, v => { state.form.medications[i].time = v; }, '8:00 am')));
+    grid.appendChild(renderField('Dosage',
+      renderInput(row.dosage, v => { state.form.medications[i].dosage = v; }, '1 tablet')));
+    card.appendChild(grid);
+
+    card.appendChild(renderField('Medicine name',
+      renderInput(row.name, v => { state.form.medications[i].name = v; }, 'e.g. Metformin 500mg')));
+
+    const rm = h('div', s({textAlign:'right'}));
+    const rmBtn = h('button', {type:'button', style:{background:'none', border:'none',
+      color:B.red, fontSize:12, cursor:'pointer', padding:0}}, '× Remove');
+    rmBtn.addEventListener('click', () => {
+      state.form.medications = state.form.medications.filter((_, j) => j !== i);
+      render();
+    });
+    rm.appendChild(rmBtn);
+    card.appendChild(rm);
+    wrap.appendChild(card);
+  });
+
+  const add = h('button', {type:'button', style:{width:'100%', padding:'12px 0',
+    border:`1.5px dashed ${B.blue}`, borderRadius:10, background:B.blueLt,
+    color:B.blue, fontSize:14, fontWeight:600, cursor:'pointer'}}, '+ Add medication');
+  add.addEventListener('click', () => {
+    state.form.medications = [...(state.form.medications || []), { time:'', name:'', dosage:'' }];
+    render();
+  });
+  wrap.appendChild(add);
+  return wrap;
+}
+
 function renderStep3() {
   const f = state.form;
+  const cfg = tierCfg();
   const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
   sec.appendChild(renderSectionHead('Daily care and safety', 'Monitoring, medication support and movement'));
 
-  const medTimesW = renderField('Medication times',
-    renderTextarea(f.medicationTimes, v => upd('medicationTimes', v), 'e.g. 8am after breakfast, 2pm, 9pm before bed', 2));
-  medTimesW.style.display = f.medication === 'Yes' ? 'block' : 'none';
+  const medRowsW = h('div', null);
+  medRowsW.appendChild(renderLabel('Medicines'));
+  medRowsW.appendChild(renderMedicationRows());
+  medRowsW.style.display = f.medication === 'Yes' ? 'block' : 'none';
 
   const exFreqW = renderRadio(EXERCISE_FREQUENCY, f.exerciseFrequency,
     v => upd('exerciseFrequency', v), 'Exercise frequency');
@@ -542,20 +652,66 @@ function renderStep3() {
 
   sec.appendChild(renderRadio(FALL_RISK, f.fallRisk, v => upd('fallRisk', v), 'Fall risk'));
   sec.appendChild(renderChips(VITALS, 'vitals', v => tog('vitals', v), 'Vitals to monitor'));
-  sec.appendChild(renderRadio(['Yes','No'], f.medication, v => {
-    upd('medication', v);
-    medTimesW.style.display = v === 'Yes' ? 'block' : 'none';
-  }, 'Medication support needed'));
-  sec.appendChild(medTimesW);
 
-  sec.appendChild(h('div', s({paddingTop:20, borderTop:`1px solid ${B.border}`, fontSize:13, fontWeight:600, color:B.navy}), 'Exercise and movement'));
-  sec.appendChild(renderChips(EXERCISE_TYPES, 'exerciseTypes', v => {
-    togEx('exerciseTypes', v, NO_EXERCISE);
-    applyExerciseVis();
-  }, 'Exercise type'));
-  sec.appendChild(exFreqW);
-  sec.appendChild(exNotesW);
+  // A single-task service carries no medication or exercise plan at all
+  if (cfg.sections.medication) {
+    sec.appendChild(renderRadio(['Yes','No'], f.medication, v => {
+      upd('medication', v);
+      // Start them off with a row rather than an empty area and a lone button
+      if (v === 'Yes' && !(state.form.medications || []).length) {
+        state.form.medications = [{ time:'', name:'', dosage:'' }];
+      }
+      render();
+    }, 'Medication support needed'));
+    sec.appendChild(medRowsW);
+  }
+
+  if (cfg.sections.exercise) {
+    sec.appendChild(h('div', s({paddingTop:20, borderTop:`1px solid ${B.border}`, fontSize:13, fontWeight:600, color:B.navy}), 'Exercise and movement'));
+    sec.appendChild(renderChips(EXERCISE_TYPES, 'exerciseTypes', v => {
+      togEx('exerciseTypes', v, NO_EXERCISE);
+      applyExerciseVis();
+    }, 'Exercise type'));
+    sec.appendChild(exFreqW);
+    sec.appendChild(exNotesW);
+  }
   return sec;
+}
+
+/* The package includes a number of kits per SESSION, not one of each type.
+   Units are charged against that allowance in a stable order — the mandatory
+   disposable kit first, then KITS order — so the same selection always bills
+   the same way, and a kit's own pill depends on what else is selected.
+   One calculation, used by the cards, the summary bar and the plan JSON. */
+function kitBilling(kitsObj, allowance) {
+  const kits = kitsObj || {};
+  const order = [DISPOSABLE_KIT].concat(
+    KITS.map(k => k.name).filter(n => n !== DISPOSABLE_KIT));
+  let remaining = Math.max(0, allowance);
+  let total = 0;
+  const perKit = {};
+
+  order.filter(n => kits[n] != null).forEach(name => {
+    const qty = kits[name];
+    total += qty;
+    const covered = Math.max(0, Math.min(qty, remaining));
+    remaining -= covered;
+    const chargeable = qty - covered;
+    perKit[name] = {
+      qty, covered, chargeable,
+      label: chargeable === 0 ? 'Included'
+           : covered === 0    ? `${chargeable} chargeable`
+           : `${covered} included, ${chargeable} chargeable`
+    };
+  });
+
+  return {
+    total,
+    allowance,
+    included: Math.min(total, allowance),
+    extra: Math.max(0, total - allowance),
+    perKit
+  };
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -602,6 +758,11 @@ function renderStep5() {
     const sug = suggestSupplies();
     state.form = {...state.form, kits: sug.kits, consumables: sug.consumables};
   }
+  // Mandatory regardless of how the form got here — including plans started
+  // before the kit became compulsory
+  if ((state.form.kits || {})[DISPOSABLE_KIT] == null) {
+    state.form = {...state.form, kits: {...(state.form.kits || {}), [DISPOSABLE_KIT]: 1}};
+  }
 
   const f = state.form;
   const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
@@ -616,30 +777,37 @@ function renderStep5() {
     kitsBlock.appendChild(h('div', s({fontSize:12, color:B.muted, marginBottom:10}),
       'Pre-selected from the assessment — review and adjust.'));
   }
+  const allowance = tierCfg().kitAllowance;
   kitsBlock.appendChild(h('div', s({fontSize:13, fontWeight:600, color:B.navy}), 'Kits required'));
   kitsBlock.appendChild(h('div', s({fontSize:12, color:B.muted, marginBottom:14, lineHeight:'1.45'}),
-    'One of each kit is included in the package. Additional kits of the same type are charged separately.'));
+    `Your package includes ${allowance} kits per session. The disposable kit is always one of them. Additional kits are charged separately.`));
 
   const summary = h('div', s({
     padding:'10px 14px', borderRadius:8, background:B.bg,
     border:`1px solid ${B.border}`, marginTop:4, fontSize:13
   }));
 
+  // Every card's pill depends on the whole selection, so a change repaints all of them
+  const painters = [];
+  function repaintAll() { painters.forEach(p => p()); paintSummary(); }
+
   function paintSummary() {
-    const kits = state.form.kits || {};
-    const names = Object.keys(kits);
-    const included = names.length;
-    const extra = names.reduce((n, k) => n + (kits[k] - 1), 0);
+    const b = kitBilling(state.form.kits, allowance);
     summary.textContent = '';
     summary.appendChild(document.createTextNode(
-      `${included + extra} kits selected · ${included} included · `));
+      `${b.total} kits · ${b.allowance} included · `));
     summary.appendChild(h('span', s({
-      fontWeight: extra > 0 ? 700 : 400,
-      color: extra > 0 ? '#92400E' : B.muted
-    }), `${extra} chargeable`));
+      fontWeight: b.extra > 0 ? 700 : 400,
+      color: b.extra > 0 ? '#92400E' : B.muted
+    }), `${b.extra} chargeable`));
+    if (!state.suppliesTouched && b.extra > 0) {
+      summary.appendChild(h('div', s({fontSize:11.5, color:'#92400E', marginTop:6, lineHeight:'1.4'}),
+        `The assessment alone suggests ${b.total} kits, which is ${b.extra} over the ${b.allowance} included. Review before confirming.`));
+    }
   }
 
   KITS.forEach(kit => {
+    const mandatory = kit.name === DISPOSABLE_KIT;
     const card = h('div', s({padding:'12px 14px', borderRadius:10, marginBottom:10, cursor:'pointer'}));
 
     const top = h('div', s({display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10}));
@@ -660,12 +828,14 @@ function renderStep5() {
     const minus = stepBtn('−');
     const plus  = stepBtn('+');
     const qtyEl = h('div', s({fontSize:15, fontWeight:700, color:B.navy, minWidth:20, textAlign:'center'}));
+    const lock  = h('div', s({fontSize:11, color:B.muted}), 'Always included');
     const tag   = h('div', s({marginLeft:'auto'}));
     const qtyRow = h('div', s({marginTop:12, display:'flex', alignItems:'center', gap:12}),
-      minus, qtyEl, plus, tag);
+      minus, qtyEl, plus, lock, tag);
     card.appendChild(qtyRow);
 
-    // Repaint this one card in place — a full render() would flash the whole form
+    // The pill depends on the whole selection, so this is called for every card
+    // on any change rather than only for the one that was touched
     function paint() {
       const qty = (state.form.kits || {})[kit.name];
       const sel = qty != null;
@@ -673,27 +843,33 @@ function renderStep5() {
       card.style.background = sel ? B.blueLt : 'white';
       nameEl.style.color = sel ? B.navy : B.text;
       addEl.style.display = sel ? 'none' : 'block';
+      card.style.cursor = mandatory && sel ? 'default' : 'pointer';
       qtyRow.style.display = sel ? 'flex' : 'none';
       if (sel) {
         qtyEl.textContent = String(qty);
-        const chargeable = qty > 1;
+        // The disposable kit cannot be removed, so at one it has no minus to press
+        const atFloor = mandatory && qty <= 1;
+        minus.style.display = atFloor ? 'none' : 'flex';
+        lock.style.display  = atFloor ? 'block' : 'none';
+        const bill = kitBilling(state.form.kits, allowance).perKit[kit.name];
+        const chargeable = bill && bill.chargeable > 0;
         tag.textContent = '';
         tag.appendChild(h('span', s({
           fontSize:11, fontWeight:600,
           color: chargeable ? '#92400E' : '#166534',
           background: chargeable ? '#FEF3C7' : '#DCFCE7',
           padding:'4px 10px', borderRadius:20
-        }), chargeable ? `+${qty - 1} chargeable` : 'Included'));
+        }), bill ? bill.label : 'Included'));
       }
-      paintSummary();
     }
+    painters.push(paint);
 
     function setQty(n) {
       const kits = {...(state.form.kits || {})};
       if (n == null) delete kits[kit.name]; else kits[kit.name] = n;
       state.form = {...state.form, kits};
       state.suppliesTouched = true;
-      paint();
+      repaintAll();
     }
 
     card.addEventListener('click', () => {
@@ -703,6 +879,7 @@ function renderStep5() {
       e.stopPropagation();
       const qty = (state.form.kits || {})[kit.name];
       if (qty == null) return;
+      if (mandatory && qty <= 1) return;   // the disposable kit stays
       setQty(qty <= 1 ? null : qty - 1);   // stepping below one removes the kit
     });
     plus.addEventListener('click', e => {
@@ -711,9 +888,9 @@ function renderStep5() {
       setQty(Math.min(MAX_KIT_QTY, qty + 1));
     });
 
-    paint();
     kitsBlock.appendChild(card);
   });
+  repaintAll();
 
   kitsBlock.appendChild(summary);
   sec.appendChild(kitsBlock);
@@ -827,26 +1004,71 @@ function sanitisedForm() {
   const f = { ...state.form };
   if (f.careType !== 'Post-surgical recovery') f.surgeryDate = '';
   if (!f.wounds || f.wounds === 'None')        f.woundLocation = '';
-  if (f.medication !== 'Yes')                  f.medicationTimes = '';
   if ((f.exerciseTypes || []).includes(NO_EXERCISE)) {
     f.exerciseFrequency = '';
     f.exerciseNotes = '';
   }
+
+  // Half-typed rows are noise; drop any where nothing was entered at all
+  f.medications = (f.medications || []).filter(m =>
+    (m.time || '').trim() || (m.name || '').trim() || (m.dosage || '').trim());
+  if (f.medication !== 'Yes') f.medications = [];
+
+  // A tier that has no medication or exercise section must not smuggle values
+  // recorded before the tier was changed
+  const cfg = TIER_CONFIG[f.serviceTier] || {};
+  if (cfg.sections && !cfg.sections.medication) {
+    f.medication = 'No'; f.medications = [];
+  }
+  if (cfg.sections && !cfg.sections.exercise) {
+    f.exerciseTypes = []; f.exerciseFrequency = ''; f.exerciseNotes = '';
+  }
+  if (cfg.timeMode !== 'clock') f.shiftStart = '';
   return f;
 }
 
 function buildSupplies(f) {
-  const kits = Object.entries(f.kits || {}).map(([name, qty]) => {
+  const allowance = tierCfg(f.serviceTier).kitAllowance;
+  const bill = kitBilling(f.kits, allowance);
+  // Emit the split alongside the rows so the PDF prints these figures rather
+  // than recomputing them and risking a different answer on the same plan
+  const kits = Object.keys(bill.perKit).map(name => {
     const k = KITS.find(x => x.name === name);
-    const extra = qty - 1;
     return {
       name,
-      quantity: qty,
+      quantity: bill.perKit[name].qty,
       purpose: k ? k.purpose : '',
-      billing: extra > 0 ? `1 included, ${extra} chargeable` : 'Included'
+      billing: bill.perKit[name].label
     };
   });
-  return { kits, consumables: [...(f.consumables || [])] };
+  return {
+    kits,
+    consumables: [...(f.consumables || [])],
+    kit_allowance: bill.allowance,
+    kits_total: bill.total,
+    kits_included: bill.included,
+    kits_chargeable: bill.extra
+  };
+}
+
+/* The assessor's rows are the source of truth for time, name and dosage. The
+   prompt asks the model to copy them verbatim, but a medicine schedule is not
+   something to leave to instruction-following — so only the plain-language
+   "note" is taken from the model, matched back by position. */
+function buildMedications(f, fromModel) {
+  const rows = f.medications || [];
+  const modelRows = Array.isArray(fromModel) ? fromModel : [];
+  return rows.map((row, i) => {
+    const m = modelRows[i] || {};
+    const sameMedicine = (m.name || '').trim() === (row.name || '').trim();
+    return {
+      time:   row.time   || '',
+      name:   row.name   || '',
+      dosage: row.dosage || '',
+      // Only keep a note that was written against this same medicine
+      note:   sameMedicine && typeof m.note === 'string' ? m.note : ''
+    };
+  });
 }
 
 function buildExercise(f, precautions) {
@@ -865,9 +1087,63 @@ async function generate() {
 
   state.screen = 'loading'; state.error = ''; state.notice = ''; render();
 
-  const blocks = TIER_BLOCKS[f.serviceTier] || 3;
+  const cfg = tierCfg(f.serviceTier);
+  const sec = cfg.sections;
   const vitals = (f.vitals || []).length ? f.vitals : ['Blood pressure', 'Pulse', 'Temperature'];
   const restAdvised = (f.exerciseTypes || []).includes(NO_EXERCISE);
+  const meds = f.medications || [];
+  const turning2h = f.mobility === 'Bedbound';
+
+  // Short services get at most two blocks; otherwise fall back to the per-tier count
+  const blocks = sec.routine === 'short'
+    ? Math.min(2, TIER_BLOCKS[f.serviceTier] || 2)
+    : (TIER_BLOCKS[f.serviceTier] || 3);
+
+  const timeRule = cfg.timeMode === 'relative' ? `
+TIME FORMAT — RELATIVE. This service can be delivered at any time of day. Do NOT use clock times
+anywhere in daily_routine. Use elapsed time from the start of the visit. Set "block" to a short
+sequence name ("On arrival", "First hour", "Second hour", "Before leaving") and "time_range" to
+elapsed minutes ("0–20 min", "20–60 min"). Set each task's "time" to elapsed time ("0:00", "0:20").
+The total elapsed time across all blocks must not exceed ${cfg.hours} hour${cfg.hours === 1 ? '' : 's'}.` : `
+TIME FORMAT — CLOCK. This is a ${cfg.hours}-hour service starting at ${f.shiftStart || '08:00'}.
+Meals, medicines and sleep are anchored to the day, so use real clock times. Derive every time in
+daily_routine from the shift start, running forward for ${cfg.hours} hours and wrapping past
+midnight where needed (a shift from 20:00 runs into the following morning). Write times in a form
+the family reads easily ("8:00 am", "1:30 pm"). Do not schedule anything outside the shift.`;
+
+  const restRule = cfg.staffRestHours > 0 ? `
+STAFF REST — MANDATORY. This is a ${cfg.hours}-hour service and the nurse must have
+${cfg.staffRestHours} hours of rest. Include a block in daily_routine with
+"block": "${REST_BLOCK}" covering ${cfg.staffRestHours} continuous hours. For 24-hour care place it
+overnight, when the patient is asleep and needs least active care. Its "tasks" must state, in plain
+language addressed to the patient and family: what care continues during this period (the nurse
+remains in the home and is woken for emergencies), what the family should do if the patient needs
+help, and how to wake the nurse. Never schedule scheduled tasks — medication, feeds, exercises —
+inside this block.${turning2h ? `
+This patient is bedbound. If 2-hourly turning is clinically required it must continue through the
+rest period: say so explicitly, shorten the rest block accordingly, and set "staffing_note" to a
+plain-language warning that a family member or a second nurse must carry out the overnight turns.` : ''}` : '';
+
+  const medRule = !sec.medication ? `
+MEDICATION. This is a single-task service. Do NOT include medication in the plan. Omit the
+medications array entirely.` : (meds.length ? `
+MEDICATION — the medications array below was recorded by the assessor. Copy it into your output
+EXACTLY as given. Do not reword, reformat, correct spelling, convert dosages, add medicines, or
+remove any. If a time reads 'after breakfast', keep it. Add a brief plain-language "note" per
+medicine ONLY where there is a clear administration point the family should know, such as taking it
+with food. If unsure, leave note empty.
+Schema: "medications": [{ "time": "", "name": "", "dosage": "", "note": "" }]` : `
+MEDICATION. No medicines were recorded. Omit the medications array entirely.`);
+
+  const exerciseRule = !sec.exercise ? `
+EXERCISE. This is a single-task service. Do NOT include an exercise plan and do not mention
+exercises in the routine.` : '';
+
+  const monitoringRule = sec.monitoring === 'minimal' ? `
+- monitoring: include ONLY the vitals the assessor selected, and no more than two rows total.` : `
+- monitoring: one row for each of these measures and no others: ${vitals.join(', ')}.
+  normal_range and call_if must be real clinical thresholds appropriate to this patient's age and
+  conditions. call_if is what makes the family pick up the phone, so be specific and numeric.`;
 
   const systemPrompt = `You are a senior nurse at Lifetime Health, Bangalore, writing a home care plan.
 
@@ -905,21 +1181,25 @@ Produce exactly this shape:
   "safety_at_home": ["plain-language safety point", "..."],
   "contact_criteria": ["Call your nurse if ...", "..."],
   "exercise_precautions": "what to stop for, one or two sentences",
+  "medications": [{ "time": "", "name": "", "dosage": "", "note": "" }],
+  "staffing_note": "",
   "session_count": 10
 }
+${timeRule}
+${restRule}
+${medRule}
+${exerciseRule}
 
 RULES:
-- daily_routine must contain exactly ${blocks} block${blocks === 1 ? '' : 's'}, matching a
-  ${f.serviceTier || 'standard'} engagement. Each block gets 4 to 5 tasks. Times must be real clock
-  times inside the block's own range, in order, and must not overlap between blocks.
+- daily_routine must contain at most ${blocks} block${blocks === 1 ? '' : 's'}, matching a
+  ${f.serviceTier || 'standard'} engagement. Each block gets 4 to 5 tasks, in order, not overlapping
+  between blocks.${cfg.staffRestHours > 0 ? ` The rest block is additional to these.` : ''}
 - care_explained: 5 to 6 items, drawn from the core tasks of this care type and from what the
   assessment below actually shows. This is the section a replacement nurse relies on, so the "why"
-  must give the real reason, not a platitude.
-- monitoring: one row for each of these measures and no others: ${vitals.join(', ')}.
-  normal_range and call_if must be real clinical thresholds appropriate to this patient's age and
-  conditions. call_if is what makes the family pick up the phone, so be specific and numeric.
+  must give the real reason, not a platitude.${monitoringRule}
 - safety_at_home: exactly 5 items, specific to this patient's mobility, equipment and home risks.
 - contact_criteria: exactly 5 items, each starting with "Call".
+- staffing_note: leave as an empty string unless a real staffing constraint applies.
 - exercise_precautions: ${restAdvised
     ? 'rest has been advised, so return an empty string for this field.'
     : 'what would make your nurse stop the exercises for this particular patient.'}
@@ -936,8 +1216,8 @@ ${JSON.stringify(proto, null, 2)}`;
 
 Name: ${f.name || 'Patient'} | Age: ${f.age || 'not recorded'} | Gender: ${f.gender} | Zone: ${f.zone}
 Care type: ${f.careType}
-Service tier: ${f.serviceTier}
-Care starts: ${f.startDate || 'not recorded'}
+Service tier: ${f.serviceTier} (${cfg.hours} hour${cfg.hours === 1 ? '' : 's'} per session)
+Care starts: ${f.startDate || 'not recorded'}${cfg.timeMode === 'clock' ? `\nShift starts at: ${f.shiftStart || '08:00'}` : ''}
 Assessed by: ${f.assessedBy || 'not recorded'}
 ${f.careType === 'Post-surgical recovery' ? `Surgery or discharge date: ${f.surgeryDate || 'not recorded'}\n` : ''}
 Medical conditions: ${(f.conditions || []).length ? f.conditions.join(', ') : 'None recorded'}${(f.conditions || []).includes('Other') && f.conditionsOther ? ` (other: ${f.conditionsOther})` : ''}
@@ -956,7 +1236,8 @@ Wounds: ${f.wounds}${f.wounds !== 'None' && f.woundLocation ? ` at ${f.woundLoca
 DAILY NEEDS
 Fall risk: ${f.fallRisk}
 Vitals to monitor: ${vitals.join(', ')}
-Medication support: ${f.medication}${f.medication === 'Yes' && f.medicationTimes ? ` — ${f.medicationTimes}` : ''}
+Medication support: ${f.medication}
+${meds.length ? `MEDICATIONS RECORDED BY THE ASSESSOR — copy these verbatim:\n${JSON.stringify(meds, null, 2)}` : 'Medicines recorded: none'}
 Exercise: ${(f.exerciseTypes || []).length ? f.exerciseTypes.join(', ') : 'none recorded'}${f.exerciseFrequency ? `, ${f.exerciseFrequency}` : ''}
 Exercise instructions from the assessor: ${f.exerciseNotes || 'none'}
 Equipment already at home: ${(f.equipment || []).length ? f.equipment.join(', ') : 'none recorded'}
@@ -991,14 +1272,25 @@ Write the care plan as JSON:`;
     state.plan = {
       care_summary:        parsed.care_summary || '',
       service_tier:        f.serviceTier,
+      time_mode:           cfg.timeMode,
+      shift_start:         cfg.timeMode === 'clock' ? (f.shiftStart || '08:00') : '',
       daily_routine:       parsed.daily_routine || [],
       care_explained:      parsed.care_explained || [],
-      exercise_plan:       buildExercise(f, parsed.exercise_precautions),
+      medications:         buildMedications(f, parsed.medications),
+      exercise_plan:       sec.exercise ? buildExercise(f, parsed.exercise_precautions) : null,
       monitoring:          parsed.monitoring || [],
       safety_at_home:      parsed.safety_at_home || [],
       contact_criteria:    parsed.contact_criteria || [],
       escalation_pathway:  'Attending nurse → Lifetime Health clinical team',
+      staffing_note:       typeof parsed.staffing_note === 'string' ? parsed.staffing_note : '',
       supplies:            buildSupplies(f),
+      // Patient data, never routed through the model
+      contacts: {
+        emergency_name:  f.emergencyName  || '',
+        emergency_phone: f.emergencyPhone || '',
+        doctor_name:     f.doctorName     || '',
+        doctor_phone:    f.doctorPhone    || ''
+      },
       session_count:       sessions,
       _form:               f,
       _generatedAt:        new Date().toLocaleString('en-IN', {
@@ -1099,9 +1391,15 @@ function renderPlan() {
   if ((p.daily_routine || []).length) {
     body.appendChild(planSection('YOUR DAILY ROUTINE', B.blue));
     p.daily_routine.forEach(block => {
-      const card = h('div', s({border:`1px solid ${B.border}`, borderRadius:10, overflow:'hidden', marginBottom:12, background:'white'}));
-      const bh = h('div', s({background:B.blue, padding:'8px 13px', display:'flex', justifyContent:'space-between', alignItems:'center'}));
-      bh.appendChild(h('div', s({color:'white', fontSize:13, fontWeight:700}), block.block || ''));
+      // The rest block is navy with a tag, so it reads as a scheduled part of the
+      // service rather than a gap where care stopped
+      const isRest = (block.block || '') === REST_BLOCK;
+      const card = h('div', s({border:`1px solid ${isRest ? B.navy : B.border}`, borderRadius:10, overflow:'hidden', marginBottom:12, background:'white'}));
+      const bh = h('div', s({background: isRest ? B.navy : B.blue, padding:'8px 13px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}));
+      const bhLeft = h('div', s({display:'flex', alignItems:'center', gap:8}));
+      bhLeft.appendChild(h('div', s({color:'white', fontSize:13, fontWeight:700}), block.block || ''));
+      if (isRest) bhLeft.appendChild(h('div', s({background:'rgba(255,255,255,0.18)', color:'white', fontSize:9, fontWeight:700, letterSpacing:'0.6px', padding:'2px 7px', borderRadius:20}), 'REST'));
+      bh.appendChild(bhLeft);
       bh.appendChild(h('div', s({color:B.blueLt2, fontSize:11}), block.time_range || ''));
       card.appendChild(bh);
       (block.tasks || []).forEach((t, i) => {
@@ -1115,6 +1413,35 @@ function renderPlan() {
       });
       body.appendChild(card);
     });
+  }
+
+  // A real staffing constraint the family has to know about before care starts
+  if (p.staffing_note) {
+    body.appendChild(h('div', s({background:'#FEF3C7', borderLeft:'3px solid #D97706', borderRadius:8,
+      padding:'12px 14px', marginTop:14, fontSize:12.5, color:'#92400E', lineHeight:'1.5'}),
+      '! ' + p.staffing_note));
+  }
+
+  // Medication
+  if ((p.medications || []).length) {
+    body.appendChild(planSection('MEDICATION SCHEDULE', B.navy));
+    body.appendChild(h('div', s({fontSize:11.5, color:B.muted, marginBottom:10, lineHeight:'1.45'}),
+      'Give each medicine at the time shown. Tick the record sheet once given. Never change a dose without speaking to the doctor.'));
+    p.medications.forEach((m, i) => {
+      const row = h('div', s({display:'flex', gap:10, padding:'10px 13px', alignItems:'flex-start',
+        background: i % 2 ? B.bg : 'white', border:`1px solid ${B.border}`,
+        borderRadius:8, marginBottom:6}));
+      row.appendChild(h('div', s({fontSize:12.5, fontWeight:700, color:B.navy, minWidth:66, flexShrink:0}), m.time || '—'));
+      const col = h('div', s({flex:'1'}));
+      col.appendChild(h('div', s({fontSize:12.5, fontWeight:600, color:B.text}), m.name || ''));
+      if (m.note) col.appendChild(h('div', s({fontSize:11, color:B.muted, fontStyle:'italic', marginTop:2, lineHeight:'1.4'}), m.note));
+      row.appendChild(col);
+      row.appendChild(h('div', s({fontSize:12.5, fontWeight:700, color:B.navy, flexShrink:0}), m.dosage || ''));
+      body.appendChild(row);
+    });
+    body.appendChild(h('div', s({background:'#FEF3C7', borderRadius:8, padding:'10px 13px',
+      marginTop:6, fontSize:11.5, color:'#92400E', lineHeight:'1.45'}),
+      "This schedule was recorded from the patient's prescription at assessment. If any medicine or dose has changed, tell your nurse before the next visit."));
   }
 
   // Care explained
@@ -1131,8 +1458,9 @@ function renderPlan() {
     });
   }
 
-  // Exercise
-  const ex = p.exercise_plan || {};
+  // Exercise — absent entirely on tiers that have no exercise section
+  const ex = p.exercise_plan || null;
+  if (ex && ((ex.types || []).length || ex.instructions || ex.precautions)) {
   body.appendChild(planSection('EXERCISE AND MOVEMENT', B.blue));
   if ((ex.types || []).includes(NO_EXERCISE)) {
     body.appendChild(h('div', s({background:'#FEF3C7', borderLeft:'3px solid #D97706', borderRadius:8, padding:'12px 14px', fontSize:12.5, color:'#92400E', lineHeight:'1.5'}),
@@ -1149,6 +1477,7 @@ function renderPlan() {
     }
     if (ex.instructions) body.appendChild(h('div', s({border:`1px solid ${B.border}`, borderRadius:8, padding:'12px 14px', fontSize:12.5, color:B.text, lineHeight:'1.55', background:'white', marginBottom:10}), ex.instructions));
     if (ex.precautions) body.appendChild(h('div', s({background:'#FEF3C7', borderLeft:'3px solid #D97706', borderRadius:8, padding:'11px 13px', fontSize:12, color:'#92400E', lineHeight:'1.5'}), '! ' + ex.precautions));
+  }
   }
 
   // Monitoring
@@ -1191,6 +1520,33 @@ function renderPlan() {
     esc.appendChild(h('div', s({fontSize:12, color:B.muted, fontWeight:600}), 'Escalation:'));
     esc.appendChild(h('div', s({fontSize:12, color:B.navy, fontWeight:700}), p.escalation_pathway));
     body.appendChild(esc);
+
+    // Straight from the assessment, never through the model
+    const ct = p.contacts || {};
+    const rows = [
+      ['Emergency contact', ct.emergency_name, ct.emergency_phone],
+      ['Attending doctor',  ct.doctor_name,    ct.doctor_phone]
+    ].filter(([, nm, ph]) => (nm || '').trim() || (ph || '').trim());
+
+    if (rows.length) {
+      const card = h('div', s({border:`1px solid ${B.border}`, borderRadius:8, padding:'12px 14px', marginTop:10, background:'white'}));
+      card.appendChild(h('div', s({fontSize:9.5, fontWeight:700, color:B.muted, letterSpacing:'0.5px', marginBottom:8}), 'YOUR CONTACTS'));
+      rows.forEach(([label, nm, ph], i) => {
+        const r = h('div', s({display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:10,
+          paddingTop: i ? 8 : 0, marginTop: i ? 8 : 0, borderTop: i ? `1px solid ${B.border}` : 'none'}));
+        const left = h('div', null);
+        left.appendChild(h('div', s({fontSize:10.5, color:B.muted, marginBottom:2}), label));
+        left.appendChild(h('div', s({fontSize:13, fontWeight:600, color:B.navy}), (nm || '').trim() || '—'));
+        r.appendChild(left);
+        if ((ph || '').trim()) {
+          const a = h('a', {href:'tel:' + String(ph).replace(/\s+/g,''), style:{
+            fontSize:13, fontWeight:700, color:B.blue, textDecoration:'none', flexShrink:0}}, ph);
+          r.appendChild(a);
+        }
+        card.appendChild(r);
+      });
+      body.appendChild(card);
+    }
   }
 
   // Supplies
@@ -1231,7 +1587,9 @@ function renderPlan() {
           patient: {
             name: f.name, age: f.age, gender: f.gender, zone: f.zone,
             care_type: f.careType, service_tier: f.serviceTier,
-            start_date: f.startDate, assessed_by: f.assessedBy
+            start_date: f.startDate, assessed_by: f.assessedBy,
+            emergency_name: f.emergencyName, emergency_phone: f.emergencyPhone,
+            doctor_name: f.doctorName, doctor_phone: f.doctorPhone
           },
           plan: p
         })

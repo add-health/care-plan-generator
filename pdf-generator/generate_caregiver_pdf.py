@@ -27,7 +27,7 @@ from reportlab.pdfgen import canvas as rc
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.colors import HexColor, white
 from reportlab.lib.units import mm
-import json, sys, os
+import json, sys, os, re
 
 # ── Copied verbatim from generate_pdf.py ─────────────────────────────────
 W, H = A4
@@ -221,6 +221,33 @@ def service_short(tier):
     return t[:18]
 
 NO_EXERCISE = 'No exercise — rest advised'
+REST_BLOCK  = 'Nurse rest period'
+
+def med_sort_key(rows):
+    """Order by clock time where a row parses as one; anything else ('after
+    breakfast') keeps its entered order, after the timed rows."""
+    def parse(t):
+        m = re.match(r'^\s*(\d{1,2})[:.](\d{2})\s*(am|pm)?\s*$', str(t or ''), re.I)
+        if not m:
+            m2 = re.match(r'^\s*(\d{1,2})\s*(am|pm)\s*$', str(t or ''), re.I)
+            if not m2:
+                return None
+            hh, mm_, ap = int(m2.group(1)), 0, m2.group(2)
+        else:
+            hh, mm_, ap = int(m.group(1)), int(m.group(2)), m.group(3)
+        if ap:
+            ap = ap.lower()
+            if ap == 'pm' and hh != 12: hh += 12
+            if ap == 'am' and hh == 12: hh = 0
+        if not (0 <= hh <= 23 and 0 <= mm_ <= 59):
+            return None
+        return hh * 60 + mm_
+    timed, untimed = [], []
+    for i, r in enumerate(rows):
+        v = parse(r.get('time'))
+        (timed if v is not None else untimed).append((v if v is not None else 0, i, r))
+    timed.sort(key=lambda x: (x[0], x[1]))
+    return [r for _, _, r in timed] + [r for _, _, r in untimed]
 
 
 def generate_caregiver_pdf(patient, plan, output_path):
@@ -234,6 +261,10 @@ def generate_caregiver_pdf(patient, plan, output_path):
     care_type   = patient.get('care_type', '')
     tier        = plan.get('service_tier') or patient.get('service_tier', '')
     assessed_by = patient.get('assessed_by', '')
+    em_name     = str(patient.get('emergency_name', '') or '').strip()
+    em_phone    = str(patient.get('emergency_phone', '') or '').strip()
+    dr_name     = str(patient.get('doctor_name', '') or '').strip()
+    dr_phone    = str(patient.get('doctor_phone', '') or '').strip()
 
     def new_page():
         draw_footer(c, page_num[0])
@@ -295,6 +326,22 @@ def generate_caregiver_pdf(patient, plan, output_path):
 
     y = stats_y - pill_h - 4*mm
 
+    # ── Emergency contacts ───────────────────────────────────────────────
+    # High on page one because this is what someone reaches for in a crisis.
+    # Straight from the assessment — never model output.
+    contact_bits = []
+    if em_name or em_phone:
+        contact_bits.append('Emergency contact: ' + ' · '.join([x for x in (em_name, em_phone) if x]))
+    if dr_name or dr_phone:
+        contact_bits.append('Doctor: ' + ' · '.join([x for x in (dr_name, dr_phone) if x]))
+
+    if contact_bits:
+        bar_h = 9 * mm
+        fill_rect(c, ML, y - bar_h, CW, bar_h, col('blue_l'), radius=2*mm)
+        text(c, '     '.join(contact_bits), ML + 4*mm, y - bar_h + 3.2*mm,
+             'Helvetica-Bold', 8, col('navy2'))
+        y -= bar_h + 4*mm
+
     # ── YOUR CARE ────────────────────────────────────────────────────────
     y = section_header(c, y, 'YOUR CARE', col('navy2'))
 
@@ -321,8 +368,20 @@ def generate_caregiver_pdf(patient, plan, output_path):
 
         y = need(y, card_h + 4*mm)
 
-        fill_rect(c, ML, y-7*mm, CW, 7*mm, col('blue'), radius=1.5*mm)
-        text(c, block.get('block', ''), ML+4*mm, y-7*mm+2.3*mm, 'Helvetica-Bold', 8, white)
+        # The nurse's rest is a scheduled part of the service, not a gap in care,
+        # so it is navy with a tag rather than another blue block
+        # Not `name` — that holds the patient's name and is used by every
+        # subsequent page header
+        block_name = block.get('block', '')
+        is_rest = block_name == REST_BLOCK
+        fill_rect(c, ML, y-7*mm, CW, 7*mm, col('navy2') if is_rest else col('blue'), radius=1.5*mm)
+        text(c, block_name, ML+4*mm, y-7*mm+2.3*mm, 'Helvetica-Bold', 8, white)
+        if is_rest:
+            c.setFont('Helvetica-Bold', 6)
+            tag_w = c.stringWidth('REST', 'Helvetica-Bold', 6) + 8
+            tag_x = ML + 4*mm + c.stringWidth(block_name, 'Helvetica-Bold', 8) + 4*mm
+            fill_rect(c, tag_x, y-7*mm+1.8*mm, tag_w, 3.6*mm, col('blue'), radius=1.5*mm)
+            text(c, 'REST', tag_x + tag_w/2, y-7*mm+2.9*mm, 'Helvetica-Bold', 6, white, 'center')
         text(c, block.get('time_range', ''), W-MR-4*mm, y-7*mm+2.3*mm,
              'Helvetica', 7.5, col('blue_l2'), 'right')
         ry = y - 7*mm
@@ -338,6 +397,61 @@ def generate_caregiver_pdf(patient, plan, output_path):
         c.setStrokeColor(col('line')); c.setLineWidth(0.5)
         c.rect(ML, ry, CW, y - 7*mm - ry)
         y = ry - 4*mm
+
+    # ══ MEDICATION SCHEDULE ══════════════════════════════════════════════
+    # Its own page, and only when there are medicines. This is the highest-stakes
+    # table in the document, so it is sized to be read at arm's length.
+    meds = med_sort_key(plan.get('medications') or [])
+    if meds:
+        y = new_page()
+        y = section_header(c, y, 'MEDICATION SCHEDULE', col('navy2'), icon='◈')
+        y -= draw_lines(c, measure(c,
+            'Give each medicine at the time shown. Tick the record sheet once given. '
+            'Never change a dose without speaking to the doctor.', CW, 'Helvetica', 7.5),
+            ML, y, 'Helvetica', 7.5, col('grey2'), 9.5)
+        y -= 5*mm
+
+        med_w = [CW*0.22, CW*0.48, CW*0.30]
+        def med_head(yy):
+            fill_rect(c, ML, yy-7*mm, CW, 7*mm, col('navy2'), radius=1.5*mm)
+            hx = ML
+            for i, hd in enumerate(['Time', 'Medicine', 'Dosage']):
+                text(c, hd, hx+3*mm, yy-7*mm+2.3*mm, 'Helvetica-Bold', 7, white)
+                hx += med_w[i]
+            return yy - 7*mm
+
+        y = med_head(y)
+        for i, m in enumerate(meds):
+            name_lines = measure(c, m.get('name', ''), med_w[1]-6*mm, 'Helvetica', 9)
+            note_lines = measure(c, m.get('note', ''), med_w[1]-6*mm, 'Helvetica-Oblique', 7) if m.get('note') else []
+            row_h = max(11*mm, 5*mm + len(name_lines)*10 + len(note_lines)*8.5 + 3*mm)
+            if y - row_h < FOOTER_H:
+                close_med = y
+                c.setStrokeColor(col('line')); c.setLineWidth(0.5)
+                c.line(ML, close_med, W-MR, close_med)
+                y = new_page()
+                y = med_head(y)
+            fill_rect(c, ML, y-row_h, CW, row_h, white if i % 2 == 0 else col('grey_l'))
+            text(c, m.get('time', ''), ML+3*mm, y-6.5*mm, 'Helvetica-Bold', 9.5, col('navy2'))
+            ny = draw_lines(c, name_lines, ML+med_w[0]+3*mm, y-6.5*mm, 'Helvetica', 9, col('grey1'), 10)
+            if note_lines:
+                draw_lines(c, note_lines, ML+med_w[0]+3*mm, y-6.5*mm-ny, 'Helvetica-Oblique', 7, col('grey2'), 8.5)
+            text(c, m.get('dosage', ''), ML+med_w[0]+med_w[1]+3*mm, y-6.5*mm, 'Helvetica-Bold', 9, col('navy2'))
+            y -= row_h
+        c.setStrokeColor(col('line')); c.setLineWidth(0.5)
+        c.line(ML, y, W-MR, y)
+        y -= 5*mm
+
+        warn = ("This schedule was recorded from the patient's prescription at assessment. "
+                "If any medicine or dose has changed, tell your nurse before the next visit.")
+        warn_lines = measure(c, warn, CW - 16*mm, 'Helvetica', 8)
+        box_h = len(warn_lines) * 10 + 8*mm
+        y = need(y, box_h + 4*mm)
+        fill_rect(c, ML, y-box_h, CW, box_h, HexColor('#FEF3C7'), radius=2*mm)
+        fill_rect(c, ML, y-box_h, 3*mm, box_h, col('amber'), radius=1.5*mm)
+        text(c, '!', ML+6*mm, y-5.5*mm, 'Helvetica-Bold', 10, col('amber'))
+        draw_lines(c, warn_lines, ML+11*mm, y-5.5*mm, 'Helvetica', 8, BILL_AMBER_FG, 10)
+        y -= box_h + 4*mm
 
     # ══ CARE EXPLAINED AND EXERCISE ══════════════════════════════════════
     # Sections flow rather than each starting a forced new page. With a full
@@ -377,69 +491,73 @@ def generate_caregiver_pdf(patient, plan, output_path):
         y -= 4*mm
 
     # ── EXERCISE AND MOVEMENT ────────────────────────────────────────────
+    # Tiers with no exercise section send exercise_plan as null, and must render
+    # nothing at all here rather than an empty heading
     ex = plan.get('exercise_plan') or {}
     types = ex.get('types', [])
+    has_exercise = bool(types or ex.get('instructions') or ex.get('precautions'))
 
-    y = need(y, 40*mm)
-    y = section_header(c, y, 'EXERCISE AND MOVEMENT', col('blue'), icon='◈')
+    if has_exercise:
+      y = need(y, 40*mm)
+      y = section_header(c, y, 'EXERCISE AND MOVEMENT', col('blue'), icon='◈')
 
-    if NO_EXERCISE in types:
-        msg = ('Rest is advised for now. Your nurse will not carry out exercises '
-               'until the clinical team reviews this.')
-        msg_lines = measure(c, msg, CW - 12*mm, 'Helvetica', 8)
-        box_h = len(msg_lines) * 10 + 8*mm
-        y = need(y, box_h + 4*mm)
-        fill_rect(c, ML, y-box_h, CW, box_h, HexColor('#FEF3C7'), radius=2*mm)
-        fill_rect(c, ML, y-box_h, 3*mm, box_h, col('amber'), radius=1.5*mm)
-        text(c, '!', ML+6*mm, y-5.5*mm, 'Helvetica-Bold', 10, col('amber'))
-        draw_lines(c, msg_lines, ML+11*mm, y-5.5*mm, 'Helvetica', 8, BILL_AMBER_FG, 10)
-        y -= box_h + 4*mm
-    else:
-        # Type pills, wrapping across rows
-        px, py = ML, y - 5*mm
-        row_gap = 7 * mm
-        for t in types:
-            c.setFont('Helvetica-Bold', 7)
-            w = c.stringWidth(t, 'Helvetica-Bold', 7) + 8
-            if px + w > W - MR:
-                px = ML
-                py -= row_gap
-                y -= row_gap
-            fill_rect(c, px, py-1.5*mm, w, 5.5*mm, col('blue_l'), radius=1.8*mm)
-            text(c, t, px + w/2, py + 0.3*mm, 'Helvetica-Bold', 7, col('blue'), 'center')
-            px += w + 2*mm
-        y -= 10*mm
+      if NO_EXERCISE in types:
+          msg = ('Rest is advised for now. Your nurse will not carry out exercises '
+                 'until the clinical team reviews this.')
+          msg_lines = measure(c, msg, CW - 12*mm, 'Helvetica', 8)
+          box_h = len(msg_lines) * 10 + 8*mm
+          y = need(y, box_h + 4*mm)
+          fill_rect(c, ML, y-box_h, CW, box_h, HexColor('#FEF3C7'), radius=2*mm)
+          fill_rect(c, ML, y-box_h, 3*mm, box_h, col('amber'), radius=1.5*mm)
+          text(c, '!', ML+6*mm, y-5.5*mm, 'Helvetica-Bold', 10, col('amber'))
+          draw_lines(c, msg_lines, ML+11*mm, y-5.5*mm, 'Helvetica', 8, BILL_AMBER_FG, 10)
+          y -= box_h + 4*mm
+      else:
+          # Type pills, wrapping across rows
+          px, py = ML, y - 5*mm
+          row_gap = 7 * mm
+          for t in types:
+              c.setFont('Helvetica-Bold', 7)
+              w = c.stringWidth(t, 'Helvetica-Bold', 7) + 8
+              if px + w > W - MR:
+                  px = ML
+                  py -= row_gap
+                  y -= row_gap
+              fill_rect(c, px, py-1.5*mm, w, 5.5*mm, col('blue_l'), radius=1.8*mm)
+              text(c, t, px + w/2, py + 0.3*mm, 'Helvetica-Bold', 7, col('blue'), 'center')
+              px += w + 2*mm
+          y -= 10*mm
 
-        freq = ex.get('frequency', '')
-        if freq:
-            y = need(y, 12*mm)
-            fill_rect(c, ML, y-8*mm, CW, 8*mm, col('blue_l'), radius=2*mm)
-            text(c, 'How often:', ML+4*mm, y-5.3*mm, 'Helvetica-Bold', 7.5, col('grey2'))
-            text(c, freq, ML+24*mm, y-5.3*mm, 'Helvetica-Bold', 8.5, col('blue'))
-            y -= 8*mm + 4*mm
+          freq = ex.get('frequency', '')
+          if freq:
+              y = need(y, 12*mm)
+              fill_rect(c, ML, y-8*mm, CW, 8*mm, col('blue_l'), radius=2*mm)
+              text(c, 'How often:', ML+4*mm, y-5.3*mm, 'Helvetica-Bold', 7.5, col('grey2'))
+              text(c, freq, ML+24*mm, y-5.3*mm, 'Helvetica-Bold', 8.5, col('blue'))
+              y -= 8*mm + 4*mm
 
-        instr = ex.get('instructions', '')
-        if instr:
-            instr_lines = measure(c, instr, CW - 10*mm, 'Helvetica', 8)
-            box_h = len(instr_lines) * 10 + 10*mm
-            y = need(y, box_h + 4*mm)
-            fill_rect(c, ML, y-box_h, CW, box_h, white)
-            c.setStrokeColor(col('line')); c.setLineWidth(0.6)
-            c.rect(ML, y-box_h, CW, box_h)
-            text(c, 'WHAT YOUR NURSE WILL DO', ML+5*mm, y-5*mm, 'Helvetica-Bold', 6, col('grey3'))
-            draw_lines(c, instr_lines, ML+5*mm, y-9.5*mm, 'Helvetica', 8, col('grey1'), 10)
-            y -= box_h + 4*mm
+          instr = ex.get('instructions', '')
+          if instr:
+              instr_lines = measure(c, instr, CW - 10*mm, 'Helvetica', 8)
+              box_h = len(instr_lines) * 10 + 10*mm
+              y = need(y, box_h + 4*mm)
+              fill_rect(c, ML, y-box_h, CW, box_h, white)
+              c.setStrokeColor(col('line')); c.setLineWidth(0.6)
+              c.rect(ML, y-box_h, CW, box_h)
+              text(c, 'WHAT YOUR NURSE WILL DO', ML+5*mm, y-5*mm, 'Helvetica-Bold', 6, col('grey3'))
+              draw_lines(c, instr_lines, ML+5*mm, y-9.5*mm, 'Helvetica', 8, col('grey1'), 10)
+              y -= box_h + 4*mm
 
-        prec = ex.get('precautions', '')
-        if prec:
-            prec_lines = measure(c, prec, CW - 16*mm, 'Helvetica', 8)
-            box_h = len(prec_lines) * 10 + 8*mm
-            y = need(y, box_h + 4*mm)
-            fill_rect(c, ML, y-box_h, CW, box_h, HexColor('#FEF3C7'), radius=2*mm)
-            fill_rect(c, ML, y-box_h, 3*mm, box_h, col('amber'), radius=1.5*mm)
-            text(c, '!', ML+6*mm, y-5.5*mm, 'Helvetica-Bold', 10, col('amber'))
-            draw_lines(c, prec_lines, ML+11*mm, y-5.5*mm, 'Helvetica', 8, BILL_AMBER_FG, 10)
-            y -= box_h + 4*mm
+          prec = ex.get('precautions', '')
+          if prec:
+              prec_lines = measure(c, prec, CW - 16*mm, 'Helvetica', 8)
+              box_h = len(prec_lines) * 10 + 8*mm
+              y = need(y, box_h + 4*mm)
+              fill_rect(c, ML, y-box_h, CW, box_h, HexColor('#FEF3C7'), radius=2*mm)
+              fill_rect(c, ML, y-box_h, 3*mm, box_h, col('amber'), radius=1.5*mm)
+              text(c, '!', ML+6*mm, y-5.5*mm, 'Helvetica-Bold', 10, col('amber'))
+              draw_lines(c, prec_lines, ML+11*mm, y-5.5*mm, 'Helvetica', 8, BILL_AMBER_FG, 10)
+              y -= box_h + 4*mm
 
     # ══ MONITORING, SAFETY, CONTACT, SUPPLIES ════════════════════════════
     # ── WHAT WE MONITOR ──────────────────────────────────────────────────
@@ -598,6 +716,14 @@ def generate_caregiver_pdf(patient, plan, output_path):
     text(c, 'Your nurse will complete one row at each visit. Please keep this sheet '
             'with the care plan.', ML, y-1*mm, 'Helvetica', 7.5, col('grey2'))
     y -= 7*mm
+
+    # Repeated here because this is the sheet that stays out and visible in the home
+    if contact_bits:
+        bar_h = 8 * mm
+        fill_rect(c, ML, y - bar_h, CW, bar_h, col('blue_l'), radius=2*mm)
+        text(c, '     '.join(contact_bits), ML + 4*mm, y - bar_h + 2.8*mm,
+             'Helvetica-Bold', 7.5, col('navy2'))
+        y -= bar_h + 4*mm
 
     # Column widths must sum to CW (180mm). Measure columns flex if there are many.
     fixed = {'session': 16*mm, 'date': 22*mm, 'bath': 12*mm,

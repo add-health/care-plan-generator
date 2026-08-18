@@ -224,6 +224,11 @@ app.post('/download-caregiver-pdf', async (req, res) => {
       service_tier: patient.service_tier,
       start_date:   patient.start_date,
       assessed_by:  patient.assessed_by,
+      // Emergency details come from the assessment, never from the model
+      emergency_name:  patient.emergency_name,
+      emergency_phone: patient.emergency_phone,
+      doctor_name:     patient.doctor_name,
+      doctor_phone:    patient.doctor_phone,
       date:         'Generated ' + new Date().toLocaleDateString('en-GB', {
                       day: 'numeric', month: 'short', year: 'numeric'
                     })
