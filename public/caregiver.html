@@ -117,43 +117,49 @@ const SERVICE_TIERS = ['Basic — 2 hours','Medium — 4 hours','Advanced — 8 
                'clock'    — meals, medicines and sleep are anchored to the day,
                 so absolute times are correct
      kitAllowance    total kits included per session, across all types
-     staffRestHours  rest the nurse must get inside the engagement
+     staffRestMins   rest the nurse must get inside the engagement. A short
+                     break is a flexible lunch break taken around the middle of
+                     the shift; a long one is continuous overnight rest.
    Keys must match SERVICE_TIERS exactly, em dashes included. */
 const TIER_CONFIG = {
   'Bathing assistance only': {
-    hours: 1, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    hours: 1, kitAllowance: 2, timeMode: 'relative', staffRestMins: 0,
     sections: { routine: 'short', medication: false, exercise: false,
                 monitoring: 'minimal', careExplained: true }
   },
   'Basic — 2 hours': {
-    hours: 2, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    hours: 2, kitAllowance: 2, timeMode: 'relative', staffRestMins: 0,
     sections: { routine: 'short', medication: true, exercise: true,
                 monitoring: 'full', careExplained: true }
   },
   'Medium — 4 hours': {
-    hours: 4, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    hours: 4, kitAllowance: 2, timeMode: 'relative', staffRestMins: 0,
     sections: { routine: 'full', medication: true, exercise: true,
                 monitoring: 'full', careExplained: true }
   },
   'Advanced — 8 hours': {
-    hours: 8, kitAllowance: 2, timeMode: 'relative', staffRestHours: 0,
+    hours: 8, kitAllowance: 2, timeMode: 'relative', staffRestMins: 30,
     sections: { routine: 'full', medication: true, exercise: true,
                 monitoring: 'full', careExplained: true }
   },
   'Max — 12 hours': {
-    hours: 12, kitAllowance: 3, timeMode: 'clock', staffRestHours: 1,
+    hours: 12, kitAllowance: 3, timeMode: 'clock', staffRestMins: 30,
     sections: { routine: 'full', medication: true, exercise: true,
                 monitoring: 'full', careExplained: true }
   },
   'Max+ — 24 hours': {
-    hours: 24, kitAllowance: 3, timeMode: 'clock', staffRestHours: 6,
+    hours: 24, kitAllowance: 3, timeMode: 'clock', staffRestMins: 360,
     sections: { routine: 'full', medication: true, exercise: true,
                 monitoring: 'full', careExplained: true }
   }
 };
 
 const DISPOSABLE_KIT = 'Disposable kit';
-const REST_BLOCK = 'Nurse rest period';
+// A short flexible break and a long overnight rest are different things to the
+// family reading the plan, so they are named differently and tagged differently
+const REST_BLOCK  = 'Nurse rest period';
+const BREAK_BLOCK = 'Nurse lunch break';
+const isRestBlock = name => name === REST_BLOCK || name === BREAK_BLOCK;
 
 function tierCfg(tier) {
   return TIER_CONFIG[tier || state.form.serviceTier] || TIER_CONFIG['Medium — 4 hours'];
@@ -1111,29 +1117,42 @@ daily_routine from the shift start, running forward for ${cfg.hours} hours and w
 midnight where needed (a shift from 20:00 runs into the following morning). Write times in a form
 the family reads easily ("8:00 am", "1:30 pm"). Do not schedule anything outside the shift.`;
 
-  // Placement has to be spelled out per shift length. Told only "include a rest
-  // block", the model appends it after the last care block — which on a daytime
-  // shift is just the nurse leaving an hour early.
-  const restPlacement = cfg.hours >= 24 ? `
-Place it overnight, when the patient is asleep and needs least active care.` : `
-This is a daytime shift, so the rest must fall in the MIDDLE of it, during the patient's quietest
-stretch — usually after the midday meal and personal care are done. It must NOT be the first or the
-last block of the day: at least one further care block must follow it, and the shift must end with
-care, not with rest. A rest block placed at the end of a shift is wrong, because it would simply
-mean the nurse leaves early. Do not describe the patient as asleep during a daytime rest.`;
+  /* Two different things. A long rest is continuous overnight sleep and needs a
+     fixed place in the day. A short break is a lunch break: it must not be
+     pinned to an exact clock time, because the nurse takes it when the patient
+     is settled. Told only "include a rest block", the model appends it after the
+     last care block, which on a daytime shift just means leaving early. */
+  const longRest = cfg.staffRestMins >= 240;
+  const restHrs  = Math.round(cfg.staffRestMins / 60);
 
-  const restRule = cfg.staffRestHours > 0 ? `
-STAFF REST — MANDATORY. This is a ${cfg.hours}-hour service and the nurse must have
-${cfg.staffRestHours} hour${cfg.staffRestHours === 1 ? '' : 's'} of rest. Include a block in
-daily_routine with "block": "${REST_BLOCK}" covering ${cfg.staffRestHours} continuous
-hour${cfg.staffRestHours === 1 ? '' : 's'}.${restPlacement} Its "tasks" must state, in plain
-language addressed to the patient and family: what care continues during this period (the nurse
-remains in the home and is woken for emergencies), what the family should do if the patient needs
-help, and how to wake the nurse. Never schedule scheduled tasks — medication, feeds, exercises —
-inside this block.${turning2h ? `
+  const restRule = cfg.staffRestMins <= 0 ? '' : (longRest ? `
+STAFF REST — MANDATORY. This is a ${cfg.hours}-hour service and the nurse must have ${restHrs} hours
+of rest. Include a block in daily_routine with "block": "${REST_BLOCK}" covering ${restHrs}
+continuous hours, placed overnight when the patient is asleep and needs least active care. Its
+"tasks" must state, in plain language addressed to the patient and family: what care continues
+during this period (the nurse remains in the home and is woken for emergencies), what the family
+should do if the patient needs help, and how to wake the nurse. Never schedule scheduled tasks —
+medication, feeds, exercises — inside this block.${turning2h ? `
 This patient is bedbound. If 2-hourly turning is clinically required it must continue through the
 rest period: say so explicitly, shorten the rest block accordingly, and set "staffing_note" to a
-plain-language warning that a family member or a second nurse must carry out the overnight turns.` : ''}` : '';
+plain-language warning that a family member or a second nurse must carry out the overnight turns.` : ''}` : `
+STAFF BREAK — MANDATORY. This is a ${cfg.hours}-hour shift and the nurse must get a
+${cfg.staffRestMins}-minute lunch break. Include a block in daily_routine with
+"block": "${BREAK_BLOCK}".
+
+The break is FLEXIBLE and must not be given an exact start time. Set "time_range" to a phrase such
+as "${cfg.timeMode === 'clock' ? '30 minutes, around midday' : '30 minutes, around the middle of the visit'}",
+and set the single task's "time" to the same kind of phrase ("Around midday") — never a clock time.
+Your nurse takes it when the patient is settled, which is why it is not fixed.
+
+Place it in the MIDDLE of the shift, after the midday meal and personal care are done. It must NOT
+be the first or the last block: at least one further care block must follow it, and the shift must
+end with care. A break at the end of a shift is wrong, because it would simply mean the nurse
+leaves early. Do not describe the patient as asleep — this is the middle of the day.
+
+Give it ONE task explaining, in plain language to the patient and family, that the nurse stays in
+the home, eats and rests for half an hour, and is available immediately if needed. Never schedule
+medication, feeds or exercises inside this block.` );
 
   const medRule = !sec.medication ? `
 MEDICATION. This is a single-task service. Do NOT include medication in the plan. Omit the
@@ -1204,7 +1223,7 @@ ${exerciseRule}
 RULES:
 - daily_routine must contain at most ${blocks} block${blocks === 1 ? '' : 's'}, matching a
   ${f.serviceTier || 'standard'} engagement. Each block gets 4 to 5 tasks, in order, not overlapping
-  between blocks.${cfg.staffRestHours > 0 ? ` The rest block is additional to these.` : ''}
+  between blocks.${cfg.staffRestMins > 0 ? ` The ${longRest ? 'rest' : 'break'} block is additional to these.` : ''}
 - care_explained: 5 to 6 items, drawn from the core tasks of this care type and from what the
   assessment below actually shows. This is the section a replacement nurse relies on, so the "why"
   must give the real reason, not a platitude.${monitoringRule}
@@ -1284,8 +1303,8 @@ Write the care plan as JSON:`;
        means the nurse leaves early. The prompt says so, but this is too easy to
        get wrong to leave to instruction-following, so the reviewer is told. */
     const routine = parsed.daily_routine || [];
-    const restIdx = routine.findIndex(b => (b && b.block) === REST_BLOCK);
-    const restMisplaced = cfg.staffRestHours > 0 && cfg.hours < 24 &&
+    const restIdx = routine.findIndex(b => isRestBlock(b && b.block));
+    const restMisplaced = cfg.staffRestMins > 0 && cfg.hours < 24 &&
       restIdx !== -1 && restIdx === routine.length - 1;
 
     state.plan = {
@@ -1415,12 +1434,13 @@ function renderPlan() {
     p.daily_routine.forEach(block => {
       // The rest block is navy with a tag, so it reads as a scheduled part of the
       // service rather than a gap where care stopped
-      const isRest = (block.block || '') === REST_BLOCK;
+      const isRest = isRestBlock(block.block || '');
       const card = h('div', s({border:`1px solid ${isRest ? B.navy : B.border}`, borderRadius:10, overflow:'hidden', marginBottom:12, background:'white'}));
       const bh = h('div', s({background: isRest ? B.navy : B.blue, padding:'8px 13px', display:'flex', justifyContent:'space-between', alignItems:'center', gap:8}));
       const bhLeft = h('div', s({display:'flex', alignItems:'center', gap:8}));
       bhLeft.appendChild(h('div', s({color:'white', fontSize:13, fontWeight:700}), block.block || ''));
-      if (isRest) bhLeft.appendChild(h('div', s({background:'rgba(255,255,255,0.18)', color:'white', fontSize:9, fontWeight:700, letterSpacing:'0.6px', padding:'2px 7px', borderRadius:20}), 'REST'));
+      if (isRest) bhLeft.appendChild(h('div', s({background:'rgba(255,255,255,0.18)', color:'white', fontSize:9, fontWeight:700, letterSpacing:'0.6px', padding:'2px 7px', borderRadius:20}),
+        (block.block || '') === BREAK_BLOCK ? 'BREAK' : 'REST'));
       bh.appendChild(bhLeft);
       bh.appendChild(h('div', s({color:B.blueLt2, fontSize:11}), block.time_range || ''));
       card.appendChild(bh);

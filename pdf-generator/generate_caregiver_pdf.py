@@ -221,7 +221,13 @@ def service_short(tier):
     return t[:18]
 
 NO_EXERCISE = 'No exercise — rest advised'
+# A short flexible lunch break and a long overnight rest are different things to
+# the family reading the plan, so they are named and tagged differently
 REST_BLOCK  = 'Nurse rest period'
+BREAK_BLOCK = 'Nurse lunch break'
+
+def is_rest_block(name):
+    return name in (REST_BLOCK, BREAK_BLOCK)
 
 def med_sort_key(rows):
     """Order by clock time where a row parses as one; anything else ('after
@@ -362,9 +368,14 @@ def generate_caregiver_pdf(patient, plan, output_path):
         rows = []
         for t in block.get('tasks', []):
             note_lines = measure(c, t.get('note', ''), note_w, 'Helvetica', 7) if t.get('note') else []
-            row_h = max(8*mm, 6.2*mm + len(note_lines) * 8.5)
-            rows.append((t, note_lines, row_h))
-        card_h = 7*mm + sum(r[2] for r in rows)
+            # The time column now carries phrases as well as clock times — a
+            # flexible break reads "Around midday" — so it wraps rather than
+            # running into the task name beside it
+            time_lines = measure(c, t.get('time', ''), TIME_COL - 6*mm, 'Helvetica-Bold', 7.5)
+            body_h = 6.2*mm + len(note_lines) * 8.5
+            row_h = max(8*mm, body_h, 4.2*mm + len(time_lines) * 8.5)
+            rows.append((t, note_lines, time_lines, row_h))
+        card_h = 7*mm + sum(r[3] for r in rows)
 
         y = need(y, card_h + 4*mm)
 
@@ -373,22 +384,23 @@ def generate_caregiver_pdf(patient, plan, output_path):
         # Not `name` — that holds the patient's name and is used by every
         # subsequent page header
         block_name = block.get('block', '')
-        is_rest = block_name == REST_BLOCK
+        is_rest = is_rest_block(block_name)
         fill_rect(c, ML, y-7*mm, CW, 7*mm, col('navy2') if is_rest else col('blue'), radius=1.5*mm)
         text(c, block_name, ML+4*mm, y-7*mm+2.3*mm, 'Helvetica-Bold', 8, white)
         if is_rest:
+            tag = 'BREAK' if block_name == BREAK_BLOCK else 'REST'
             c.setFont('Helvetica-Bold', 6)
-            tag_w = c.stringWidth('REST', 'Helvetica-Bold', 6) + 8
+            tag_w = c.stringWidth(tag, 'Helvetica-Bold', 6) + 8
             tag_x = ML + 4*mm + c.stringWidth(block_name, 'Helvetica-Bold', 8) + 4*mm
             fill_rect(c, tag_x, y-7*mm+1.8*mm, tag_w, 3.6*mm, col('blue'), radius=1.5*mm)
-            text(c, 'REST', tag_x + tag_w/2, y-7*mm+2.9*mm, 'Helvetica-Bold', 6, white, 'center')
+            text(c, tag, tag_x + tag_w/2, y-7*mm+2.9*mm, 'Helvetica-Bold', 6, white, 'center')
         text(c, block.get('time_range', ''), W-MR-4*mm, y-7*mm+2.3*mm,
              'Helvetica', 7.5, col('blue_l2'), 'right')
         ry = y - 7*mm
 
-        for i, (t, note_lines, row_h) in enumerate(rows):
+        for i, (t, note_lines, time_lines, row_h) in enumerate(rows):
             fill_rect(c, ML, ry-row_h, CW, row_h, white if i % 2 == 0 else col('grey_l'))
-            text(c, t.get('time', ''), ML+4*mm, ry-5*mm, 'Helvetica-Bold', 7.5, col('navy2'))
+            draw_lines(c, time_lines, ML+4*mm, ry-5*mm, 'Helvetica-Bold', 7.5, col('navy2'), 8.5)
             text(c, t.get('task', ''), ML+TIME_COL, ry-5*mm, 'Helvetica-Bold', 8, col('grey1'))
             if note_lines:
                 draw_lines(c, note_lines, ML+TIME_COL, ry-5*mm-8, 'Helvetica', 7, col('grey2'), 8.5)
