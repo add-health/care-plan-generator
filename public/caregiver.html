@@ -1111,11 +1111,22 @@ daily_routine from the shift start, running forward for ${cfg.hours} hours and w
 midnight where needed (a shift from 20:00 runs into the following morning). Write times in a form
 the family reads easily ("8:00 am", "1:30 pm"). Do not schedule anything outside the shift.`;
 
+  // Placement has to be spelled out per shift length. Told only "include a rest
+  // block", the model appends it after the last care block — which on a daytime
+  // shift is just the nurse leaving an hour early.
+  const restPlacement = cfg.hours >= 24 ? `
+Place it overnight, when the patient is asleep and needs least active care.` : `
+This is a daytime shift, so the rest must fall in the MIDDLE of it, during the patient's quietest
+stretch — usually after the midday meal and personal care are done. It must NOT be the first or the
+last block of the day: at least one further care block must follow it, and the shift must end with
+care, not with rest. A rest block placed at the end of a shift is wrong, because it would simply
+mean the nurse leaves early. Do not describe the patient as asleep during a daytime rest.`;
+
   const restRule = cfg.staffRestHours > 0 ? `
 STAFF REST — MANDATORY. This is a ${cfg.hours}-hour service and the nurse must have
-${cfg.staffRestHours} hours of rest. Include a block in daily_routine with
-"block": "${REST_BLOCK}" covering ${cfg.staffRestHours} continuous hours. For 24-hour care place it
-overnight, when the patient is asleep and needs least active care. Its "tasks" must state, in plain
+${cfg.staffRestHours} hour${cfg.staffRestHours === 1 ? '' : 's'} of rest. Include a block in
+daily_routine with "block": "${REST_BLOCK}" covering ${cfg.staffRestHours} continuous
+hour${cfg.staffRestHours === 1 ? '' : 's'}.${restPlacement} Its "tasks" must state, in plain
 language addressed to the patient and family: what care continues during this period (the nurse
 remains in the home and is woken for emergencies), what the family should do if the patient needs
 help, and how to wake the nurse. Never schedule scheduled tasks — medication, feeds, exercises —
@@ -1269,6 +1280,14 @@ Write the care plan as JSON:`;
     const sessions = Math.min(15, Math.max(6,
       parseInt(parsed.session_count, 10) || TIER_SESSIONS[f.serviceTier] || 10));
 
+    /* On a shift shorter than a full day, rest at the very end is not rest — it
+       means the nurse leaves early. The prompt says so, but this is too easy to
+       get wrong to leave to instruction-following, so the reviewer is told. */
+    const routine = parsed.daily_routine || [];
+    const restIdx = routine.findIndex(b => (b && b.block) === REST_BLOCK);
+    const restMisplaced = cfg.staffRestHours > 0 && cfg.hours < 24 &&
+      restIdx !== -1 && restIdx === routine.length - 1;
+
     state.plan = {
       care_summary:        parsed.care_summary || '',
       service_tier:        f.serviceTier,
@@ -1283,6 +1302,9 @@ Write the care plan as JSON:`;
       contact_criteria:    parsed.contact_criteria || [],
       escalation_pathway:  'Attending nurse → Lifetime Health clinical team',
       staffing_note:       typeof parsed.staffing_note === 'string' ? parsed.staffing_note : '',
+      _review_warning:     restMisplaced
+        ? 'The nurse rest block was placed at the end of the shift, which would just mean the nurse leaves early. Regenerate before sending this plan.'
+        : '',
       supplies:            buildSupplies(f),
       // Patient data, never routed through the model
       contacts: {
@@ -1413,6 +1435,13 @@ function renderPlan() {
       });
       body.appendChild(card);
     });
+  }
+
+  // For the nurse reviewing this screen, not for the patient — never printed
+  if (p._review_warning) {
+    body.appendChild(h('div', {class:'no-print', style:{background:B.redLt, borderLeft:`3px solid ${B.red}`,
+      borderRadius:8, padding:'12px 14px', marginTop:14, fontSize:12.5, color:B.red, lineHeight:'1.5'}},
+      '⚠ ' + p._review_warning));
   }
 
   // A real staffing constraint the family has to know about before care starts
