@@ -7,6 +7,12 @@ restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 3
 
 # Required environment variables (set in Railway → Variables):
-#   ANTHROPIC_API_KEY       — Claude API key for care plan generation
-#   GOOGLE_DRIVE_FOLDER_ID  — Google Drive folder ID for PDF uploads
-#   (also place credentials.json in project root for Drive service account auth)
+#   ANTHROPIC_API_KEY        — Claude API key for care plan generation
+#   GOOGLE_DRIVE_FOLDER_ID   — Google Drive folder ID for PDF uploads
+#   GOOGLE_CREDENTIALS_JSON  — Drive service account, as BASE64-encoded JSON.
+#                              Required here: credentials.json is gitignored and
+#                              cannot be placed in the container, so this is the
+#                              only auth path that works on Railway. Generate with
+#                              `base64 -i credentials.json`. Without it /save-pdf
+#                              falls back to reading a file that does not exist
+#                              and every Drive upload fails.

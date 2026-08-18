@@ -55,7 +55,26 @@ open http://localhost:3000
 1. Push this folder to a GitHub repo
 2. Go to railway.app → New Project → Deploy from GitHub
 3. Select your repo
-4. Add environment variable: `ANTHROPIC_API_KEY` = your key
+4. Add the environment variables under Railway → Variables:
+
+   | Variable | Required for | Value |
+   |---|---|---|
+   | `ANTHROPIC_API_KEY` | plan generation | your Claude API key |
+   | `GOOGLE_DRIVE_FOLDER_ID` | saving PDFs to Drive | the Drive folder ID |
+   | `GOOGLE_CREDENTIALS_JSON` | saving PDFs to Drive | service account JSON, **base64-encoded** |
+
+   `credentials.json` is gitignored and cannot be placed in the container, so on
+   Railway the service account has to come through `GOOGLE_CREDENTIALS_JSON`.
+   The server base64-decodes it before parsing, so encode the file first:
+
+   ```bash
+   base64 -i credentials.json
+   ```
+
+   Without it, `/save-pdf` falls back to reading `./credentials.json`, does not
+   find it, and every Drive upload fails. Plan generation and the direct PDF
+   download are unaffected.
+
 5. Railway auto-deploys. You get a URL like `https://your-app.railway.app`
 
 Share that URL with your physio test group — works on any device.

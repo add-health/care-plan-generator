@@ -136,9 +136,6 @@ app.post('/save-pdf', async (req, res) => {
       }
     });
 
-    // Step 4: Clean up temp file
-    fs.unlinkSync(outputPath);
-
     res.json({
       success: true,
       filename,
@@ -149,6 +146,11 @@ app.post('/save-pdf', async (req, res) => {
   } catch (err) {
     console.error('PDF save error:', err);
     res.status(500).json({ error: err.message });
+  } finally {
+    // Runs whether or not the Drive upload threw. Previously this sat at the end
+    // of the try, so an expired service account or a quota error left the file
+    // behind for the life of the container.
+    if (fs.existsSync(outputPath)) fs.unlinkSync(outputPath);
   }
 });
 
