@@ -816,8 +816,27 @@ const TIER_BLOCKS = {
   'Max — 12 hours': 4, 'Max+ — 24 hours': 5, 'Bathing assistance only': 1
 };
 
-function buildSupplies() {
-  const kits = Object.entries(state.form.kits || {}).map(([name, qty]) => {
+/* A conditional field hides when its controlling answer changes, but keeps its
+   value so the nurse can toggle back without losing her typing. That means the
+   form can hold answers the assessment no longer makes — exercise instructions
+   after rest was advised, a wound location after wounds went back to None.
+   Everything that leaves this app goes through here first, so the guarantee
+   lives in one place instead of in a check at every read site. state.form is
+   deliberately not modified. */
+function sanitisedForm() {
+  const f = { ...state.form };
+  if (f.careType !== 'Post-surgical recovery') f.surgeryDate = '';
+  if (!f.wounds || f.wounds === 'None')        f.woundLocation = '';
+  if (f.medication !== 'Yes')                  f.medicationTimes = '';
+  if ((f.exerciseTypes || []).includes(NO_EXERCISE)) {
+    f.exerciseFrequency = '';
+    f.exerciseNotes = '';
+  }
+  return f;
+}
+
+function buildSupplies(f) {
+  const kits = Object.entries(f.kits || {}).map(([name, qty]) => {
     const k = KITS.find(x => x.name === name);
     const extra = qty - 1;
     return {
@@ -827,11 +846,10 @@ function buildSupplies() {
       billing: extra > 0 ? `1 included, ${extra} chargeable` : 'Included'
     };
   });
-  return { kits, consumables: [...(state.form.consumables || [])] };
+  return { kits, consumables: [...(f.consumables || [])] };
 }
 
-function buildExercise(precautions) {
-  const f = state.form;
+function buildExercise(f, precautions) {
   return {
     types: [...(f.exerciseTypes || [])],
     frequency: f.exerciseFrequency || '',
@@ -841,7 +859,7 @@ function buildExercise(precautions) {
 }
 
 async function generate() {
-  const f = state.form;
+  const f = sanitisedForm();
   const proto = CARE_PROTOCOLS.find(p => p.care_type === f.careType);
   if (!proto) { state.error = 'Please choose the type of care needed first'; render(); return; }
 
@@ -975,12 +993,12 @@ Write the care plan as JSON:`;
       service_tier:        f.serviceTier,
       daily_routine:       parsed.daily_routine || [],
       care_explained:      parsed.care_explained || [],
-      exercise_plan:       buildExercise(parsed.exercise_precautions),
+      exercise_plan:       buildExercise(f, parsed.exercise_precautions),
       monitoring:          parsed.monitoring || [],
       safety_at_home:      parsed.safety_at_home || [],
       contact_criteria:    parsed.contact_criteria || [],
       escalation_pathway:  'Attending nurse → Lifetime Health clinical team',
-      supplies:            buildSupplies(),
+      supplies:            buildSupplies(f),
       session_count:       sessions,
       _form:               f,
       _generatedAt:        new Date().toLocaleString('en-IN', {
