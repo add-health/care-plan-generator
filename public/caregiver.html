@@ -1086,6 +1086,28 @@ function buildExercise(f, precautions) {
   };
 }
 
+/* The model keeps putting the break at the end of the shift, which just means
+   the nurse leaves early. Wording alone has not held, so placement is enforced
+   here. This is only safe for the SHORT break, whose time is a flexible phrase
+   ("around midday") with no clock time to contradict — the overnight rest block
+   carries real times and is left where the model put it. */
+function placeBreakMidShift(routine, cfg) {
+  if (!Array.isArray(routine) || cfg.staffRestMins <= 0 || cfg.hours >= 24) return routine;
+
+  const i = routine.findIndex(b => (b && b.block) === BREAK_BLOCK);
+  if (i === -1) return routine;
+
+  const care = routine.filter((_, j) => j !== i);
+  if (care.length < 2) return routine;          // nowhere meaningful to move it
+
+  const target = Math.max(1, Math.min(Math.round(care.length / 2), care.length - 1));
+  if (i === target) return routine;
+
+  const out = care.slice();
+  out.splice(target, 0, routine[i]);
+  return out;
+}
+
 async function generate() {
   const f = sanitisedForm();
   const proto = CARE_PROTOCOLS.find(p => p.care_type === f.careType);
@@ -1299,10 +1321,11 @@ Write the care plan as JSON:`;
     const sessions = Math.min(15, Math.max(6,
       parseInt(parsed.session_count, 10) || TIER_SESSIONS[f.serviceTier] || 10));
 
-    /* On a shift shorter than a full day, rest at the very end is not rest — it
-       means the nurse leaves early. The prompt says so, but this is too easy to
-       get wrong to leave to instruction-following, so the reviewer is told. */
-    const routine = parsed.daily_routine || [];
+    const routine = placeBreakMidShift(parsed.daily_routine || [], cfg);
+
+    /* Only reachable for the overnight rest, which carries real clock times and
+       so cannot be moved without contradicting them. The short break is repaired
+       above instead of reported. */
     const restIdx = routine.findIndex(b => isRestBlock(b && b.block));
     const restMisplaced = cfg.staffRestMins > 0 && cfg.hours < 24 &&
       restIdx !== -1 && restIdx === routine.length - 1;
@@ -1312,7 +1335,7 @@ Write the care plan as JSON:`;
       service_tier:        f.serviceTier,
       time_mode:           cfg.timeMode,
       shift_start:         cfg.timeMode === 'clock' ? (f.shiftStart || '08:00') : '',
-      daily_routine:       parsed.daily_routine || [],
+      daily_routine:       routine,
       care_explained:      parsed.care_explained || [],
       medications:         buildMedications(f, parsed.medications),
       exercise_plan:       sec.exercise ? buildExercise(f, parsed.exercise_precautions) : null,
