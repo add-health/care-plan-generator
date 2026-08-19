@@ -154,6 +154,18 @@ def draw_lines(c, lines, x, y, font='Helvetica', size=8, color=None, leading=11)
         c.drawString(x, y - i * leading, ln)
     return len(lines) * leading
 
+def fit_text(c, s, max_width, font='Helvetica', size=8):
+    """Shorten s until it fits max_width, marking the cut with an ellipsis. Only
+    for column headers, where the full value is printed elsewhere in the
+    document — never for prose."""
+    s = str(s or '')
+    if c.stringWidth(s, font, size) <= max_width:
+        return s
+    ell = '…' if c.stringWidth('…', font, size) else '.'
+    while s and c.stringWidth(s + ell, font, size) > max_width:
+        s = s[:-1]
+    return (s.rstrip() + ell) if s else ''
+
 def section_header(c, y, label, bg=None, icon='◈'):
     """The section bar used throughout both documents. Returns the new y."""
     bg = bg or col('navy2')
@@ -764,7 +776,97 @@ def generate_caregiver_pdf(patient, plan, output_path):
             y -= draw_lines(c, cons_lines, ML+2*mm, y, 'Helvetica', 7.5, col('grey2'), 9.5)
             y -= 4*mm
 
-    # ══ PAGE 4 — SESSION RECORD SHEET ════════════════════════════════════
+    # ══ MEDICATION RECORD (MAR) ══════════════════════════════════════════
+    # Sits directly before the session record because both are written on by
+    # hand every day — the writable sheets stay together and can be reprinted
+    # on their own when a package renews.
+    total_rows = int(plan.get('session_count') or 10)
+    MAR_ROWS_PER_PAGE = 15
+
+    if meds:
+        y = new_page()
+        y = section_header(c, y, 'MEDICATION RECORD', col('navy2'), icon='◈')
+        y -= draw_lines(c, measure(c,
+            'Your nurse initials this sheet each time a medicine is given. '
+            'If a dose is not given, write the reason code instead.', CW, 'Helvetica', 7.5),
+            ML, y-1*mm, 'Helvetica', 7.5, col('grey2'), 9.5)
+        y -= 5*mm
+
+        if contact_bits:
+            bar_h = 8 * mm
+            fill_rect(c, ML, y - bar_h, CW, bar_h, col('blue_l'), radius=2*mm)
+            text(c, '     '.join(contact_bits), ML + 4*mm, y - bar_h + 2.8*mm,
+                 'Helvetica-Bold', 7.5, col('navy2'))
+            y -= bar_h + 4*mm
+
+        MAR_SESSION_W = 14 * mm
+        MAR_DATE_W    = 20 * mm
+        MAR_NOTES_MIN = 30 * mm
+        MAR_MED_MAX   = 24 * mm
+        MAR_HEAD_H    = 10 * mm     # two lines: name over time
+        MAR_ROW_H     = 8 * mm      # hand-written initials need the room
+
+        # At most five medicines per table; the rest go to a second table below
+        # with the same sessions, so a row still means one visit either way.
+        chunks = [meds[i:i+5] for i in range(0, len(meds), 5)]
+
+        for chunk in chunks:
+            avail  = CW - MAR_SESSION_W - MAR_DATE_W
+            med_w  = min(MAR_MED_MAX, (avail - MAR_NOTES_MIN) / len(chunk))
+            notes_w = avail - med_w * len(chunk)
+            cols = ([('session', 'Session', MAR_SESSION_W), ('date', 'Date', MAR_DATE_W)]
+                    + [('med', m, med_w) for m in chunk]
+                    + [('notes', 'Notes', notes_w)])
+
+            def draw_mar_head(yy):
+                fill_rect(c, ML, yy-MAR_HEAD_H, CW, MAR_HEAD_H, col('navy2'))
+                cx = ML
+                for kind, payload, wd in cols:
+                    if kind == 'med':
+                        nm = fit_text(c, payload.get('name', ''), wd - 3*mm, 'Helvetica-Bold', 6.5)
+                        tm = fit_text(c, payload.get('time', ''), wd - 3*mm, 'Helvetica', 6)
+                        text(c, nm, cx + wd/2, yy-MAR_HEAD_H+5.6*mm, 'Helvetica-Bold', 6.5, white, 'center')
+                        text(c, tm, cx + wd/2, yy-MAR_HEAD_H+2.2*mm, 'Helvetica', 6, col('blue_l2'), 'center')
+                    else:
+                        text(c, payload, cx + wd/2, yy-MAR_HEAD_H+3.6*mm,
+                             'Helvetica-Bold', 6.5, white, 'center')
+                    cx += wd
+                return yy - MAR_HEAD_H
+
+            y = need(y, MAR_HEAD_H + MAR_ROW_H)
+            y = draw_mar_head(y)
+            drawn = 0
+            for n in range(1, total_rows + 1):
+                if drawn >= MAR_ROWS_PER_PAGE or y - MAR_ROW_H < FOOTER_H:
+                    y = new_page()
+                    y = draw_mar_head(y)
+                    drawn = 0
+                fill_rect(c, ML, y-MAR_ROW_H, CW, MAR_ROW_H, white if n % 2 else col('grey_l'))
+                cx = ML
+                c.setStrokeColor(col('line')); c.setLineWidth(0.4)
+                for kind, payload, wd in cols:
+                    c.rect(cx, y-MAR_ROW_H, wd, MAR_ROW_H, fill=0, stroke=1)
+                    if kind == 'session':
+                        text(c, str(n), cx + wd/2, y-MAR_ROW_H+2.9*mm,
+                             'Helvetica-Bold', 8, col('navy2'), 'center')
+                    cx += wd
+                y -= MAR_ROW_H
+                drawn += 1
+            y -= 4*mm
+
+        # Without this a blank cell is ambiguous between "dose missed" and
+        # "nurse forgot to write", which makes the sheet useless as evidence.
+        key_txt = ('Write your initials when a dose is given. If not given, write:  '
+                   'R = refused  ·  O = omitted  ·  A = patient absent  ·  '
+                   "H = held on doctor's advice.  Add the reason in Notes.")
+        key_lines = measure(c, key_txt, CW - 8*mm, 'Helvetica', 8)
+        key_h = len(key_lines) * 10 + 6*mm
+        y = need(y, key_h + 4*mm)
+        fill_rect(c, ML, y-key_h, CW, key_h, col('grey_l'), radius=2*mm)
+        draw_lines(c, key_lines, ML+4*mm, y-4.5*mm, 'Helvetica', 8, col('grey1'), 10)
+        y -= key_h + 4*mm
+
+    # ══ SESSION RECORD SHEET ═════════════════════════════════════════════
     y = new_page()
     y = section_header(c, y, 'YOUR CARE RECORD', col('navy2'), icon='◈')
 
@@ -781,8 +883,11 @@ def generate_caregiver_pdf(patient, plan, output_path):
         y -= bar_h + 4*mm
 
     # Column widths must sum to CW (180mm). Measure columns flex if there are many.
+    # No Meds column here — a single tick cannot say WHICH medicine was given, so
+    # medication is recorded per dose on the medication record instead. Its width
+    # goes to Notes.
     fixed = {'session': 16*mm, 'date': 22*mm, 'bath': 12*mm,
-             'exercise': 16*mm, 'meds': 12*mm, 'nurse': 18*mm}
+             'exercise': 16*mm, 'nurse': 18*mm}
     NOTES_MIN = 14 * mm
     meas = [measure_abbr(m.get('measure', '')) for m in mon]
     meas_w = 14 * mm
@@ -798,9 +903,8 @@ def generate_caregiver_pdf(patient, plan, output_path):
     headers = ([('Session', fixed['session']), ('Date', fixed['date'])]
                + [(m, meas_w) for m in meas]
                + [('Bath', fixed['bath']), ('Exercise', fixed['exercise']),
-                  ('Meds', fixed['meds']), ('Nurse', fixed['nurse']),
-                  ('Notes', notes_w)])
-    tick_cols = {'Bath', 'Exercise', 'Meds'}
+                  ('Nurse', fixed['nurse']), ('Notes', notes_w)])
+    tick_cols = {'Bath', 'Exercise'}
 
     ROW_H = 8 * mm
     HEAD_H = 7 * mm
@@ -814,7 +918,6 @@ def generate_caregiver_pdf(patient, plan, output_path):
             cx += wd
         return yy - HEAD_H
 
-    total_rows = int(plan.get('session_count') or 10)
     y = draw_table_head(y)
     drawn_on_page = 0
 
