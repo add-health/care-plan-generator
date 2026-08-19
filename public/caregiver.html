@@ -256,7 +256,9 @@ let state = {
   notice: '',
   // Set the moment a kit or consumable is edited by hand. Emptiness cannot stand in
   // for this: "every kit removed" and "never opened this step" look identical.
-  suppliesTouched: false
+  suppliesTouched: false,
+  vitalsSuggested: false,
+  vitalsNote: ''
 };
 
 /* ─────────────────────────────────────────────────────────────────
@@ -632,6 +634,19 @@ function renderMedicationRows() {
 }
 
 function renderStep3() {
+  /* A diabetic patient whose plan discusses blood sugar throughout but monitors
+     only blood pressure is an easy thing to miss on a busy assessment. Suggested
+     once, on first arrival, and freely removable — never forced, and never
+     applied over a choice the nurse has already made here. */
+  if (!state.vitalsSuggested) {
+    state.vitalsSuggested = true;
+    if ((state.form.conditions || []).includes('Diabetes') &&
+        !(state.form.vitals || []).length) {
+      state.form = {...state.form, vitals: ['Blood sugar']};
+      state.vitalsNote = 'Blood sugar added — patient has diabetes. Remove if not required.';
+    }
+  }
+
   const f = state.form;
   const cfg = tierCfg();
   const sec = h('div', {class:'form-section', style:{padding:'28px 20px 20px 20px'}});
@@ -657,7 +672,14 @@ function renderStep3() {
   applyExerciseVis();
 
   sec.appendChild(renderRadio(FALL_RISK, f.fallRisk, v => upd('fallRisk', v), 'Fall risk'));
-  sec.appendChild(renderChips(VITALS, 'vitals', v => tog('vitals', v), 'Vitals to monitor'));
+
+  const vitalsW = h('div', null);
+  vitalsW.appendChild(renderChips(VITALS, 'vitals', v => tog('vitals', v), 'Vitals to monitor'));
+  if (state.vitalsNote) {
+    vitalsW.appendChild(h('div', s({fontSize:11.5, color:B.muted, marginTop:-16, marginBottom:24, lineHeight:'1.45'}),
+      state.vitalsNote));
+  }
+  sec.appendChild(vitalsW);
 
   // A single-task service carries no medication or exercise plan at all
   if (cfg.sections.medication) {
@@ -1057,6 +1079,29 @@ function buildSupplies(f) {
   };
 }
 
+/* The time field is free text so "after breakfast" and "before bed" work, which
+   also means "12 00" and "1200" go through exactly as typed. Only a bare
+   24-hour-looking value is repaired; anything else is left alone. */
+function normaliseMedTime(t) {
+  const s = String(t == null ? '' : t).trim();
+  const ok = (hh, mm) => +hh <= 23 && +mm <= 59;
+  const suffix = ap => ap ? ' ' + ap.trim().toLowerCase() : '';
+
+  // "12 00", "12.00", optionally with am/pm
+  let m = s.match(/^(\d{1,2})[\s.](\d{2})(\s*[ap]\.?m\.?)?$/i);
+  if (m && ok(m[1], m[2])) return `${m[1]}:${m[2]}${suffix(m[3])}`;
+
+  // "1200", "0800", "800"
+  m = s.match(/^(\d{3,4})(\s*[ap]\.?m\.?)?$/i);
+  if (m) {
+    const d = m[1];
+    const hh = d.length === 3 ? d.slice(0, 1) : d.slice(0, 2);
+    const mm = d.slice(-2);
+    if (ok(hh, mm)) return `${hh}:${mm}${suffix(m[2])}`;
+  }
+  return s;
+}
+
 /* The assessor's rows are the source of truth for time, name and dosage. The
    prompt asks the model to copy them verbatim, but a medicine schedule is not
    something to leave to instruction-following — so only the plain-language
@@ -1068,7 +1113,7 @@ function buildMedications(f, fromModel) {
     const m = modelRows[i] || {};
     const sameMedicine = (m.name || '').trim() === (row.name || '').trim();
     return {
-      time:   row.time   || '',
+      time:   normaliseMedTime(row.time),
       name:   row.name   || '',
       dosage: row.dosage || '',
       // Only keep a note that was written against this same medicine
@@ -1184,7 +1229,12 @@ EXACTLY as given. Do not reword, reformat, correct spelling, convert dosages, ad
 remove any. If a time reads 'after breakfast', keep it. Add a brief plain-language "note" per
 medicine ONLY where there is a clear administration point the family should know, such as taking it
 with food. If unsure, leave note empty.
-Schema: "medications": [{ "time": "", "name": "", "dosage": "", "note": "" }]` : `
+Schema: "medications": [{ "time": "", "name": "", "dosage": "", "note": "" }]
+
+MEDICINE NAMES — wherever you refer to a medicine anywhere in this plan, including daily_routine
+tasks and care_explained text, spell it EXACTLY as recorded in the medications array. Do not correct
+spelling even if you believe it is wrong. The reviewing nurse must see the same spelling everywhere
+so any error is caught before the plan is shared.` : `
 MEDICATION. No medicines were recorded. Omit the medications array entirely.`);
 
   const exerciseRule = !sec.exercise ? `

@@ -127,6 +127,9 @@ def draw_footer(c, page_num):
 SEC_H    = 9.5 * mm
 HDR2     = 19 * mm
 FOOTER_H = 14 * mm
+# A section heading plus the gap under it. Callers add their own first item, so a
+# section moves to the next page only when its heading and first item cannot fit.
+SECTION_LEAD = SEC_H + 3 * mm
 
 def measure(c, s, max_width, font='Helvetica', size=8):
     """Wrap s to max_width and return every line. Never truncates — callers
@@ -466,21 +469,30 @@ def generate_caregiver_pdf(patient, plan, output_path):
         y -= box_h + 4*mm
 
     # ══ CARE EXPLAINED AND EXERCISE ══════════════════════════════════════
-    # Sections flow rather than each starting a forced new page. With a full
-    # 24-hour plan a forced break leaves most of a sheet blank, which reads as
-    # a printing fault on a document the family keeps.
-    y = need(y, 45*mm)
+    # Sections flow rather than each starting a forced new page, and a section
+    # only moves to the next page when its heading plus its FIRST item genuinely
+    # will not fit. Reserving a flat slab instead left a third of a page blank.
+    body_w = CW - 8*mm
+    explained = plan.get('care_explained', [])
+
+    def explained_lines(item):
+        return (measure(c, item.get('why', ''), body_w, 'Helvetica', 7.5),
+                measure(c, item.get('how', ''), body_w, 'Helvetica', 7.5))
+
+    def explained_card_h(item):
+        why_lines, how_lines = explained_lines(item)
+        return 6*mm + 4.5*mm + len(why_lines)*9.5 + 4.5*mm + len(how_lines)*9.5 + 4*mm
+
+    y = need(y, SECTION_LEAD + 6*mm + (explained_card_h(explained[0]) if explained else 0))
 
     y = section_header(c, y, 'YOUR CARE EXPLAINED', col('navy2'))
     text(c, 'What your nurse does at each visit, and why it matters.',
          ML, y-1*mm, 'Helvetica', 7.5, col('grey2'))
     y -= 6*mm
 
-    body_w = CW - 8*mm
-    for item in plan.get('care_explained', []):
-        why_lines = measure(c, item.get('why', ''), body_w, 'Helvetica', 7.5)
-        how_lines = measure(c, item.get('how', ''), body_w, 'Helvetica', 7.5)
-        card_h = 6*mm + 4.5*mm + len(why_lines)*9.5 + 4.5*mm + len(how_lines)*9.5 + 4*mm
+    for item in explained:
+        why_lines, how_lines = explained_lines(item)
+        card_h = explained_card_h(item)
 
         y = need(y, card_h + 3*mm)
         top = y
@@ -510,7 +522,7 @@ def generate_caregiver_pdf(patient, plan, output_path):
     has_exercise = bool(types or ex.get('instructions') or ex.get('precautions'))
 
     if has_exercise:
-      y = need(y, 40*mm)
+      y = need(y, SECTION_LEAD + 14*mm)   # heading plus the pill row or the rest banner
       y = section_header(c, y, 'EXERCISE AND MOVEMENT', col('blue'), icon='◈')
 
       if NO_EXERCISE in types:
@@ -598,7 +610,10 @@ def generate_caregiver_pdf(patient, plan, output_path):
     for i, m in enumerate(mon):
         cells = [m.get('measure',''), m.get('when',''),
                  m.get('normal_range',''), m.get('call_if','')]
-        wrapped = [measure(c, cells[j], cols_w[j]-6*mm, 'Helvetica', 7)[:2] for j in range(4)]
+        # No line cap. 'Call us if' is the column that overflows, and it is the
+        # one that tells the family when to phone — cutting it mid-sentence is
+        # worse than a taller row.
+        wrapped = [measure(c, cells[j], cols_w[j]-6*mm, 'Helvetica', 7) for j in range(4)]
         row_h = max(7*mm, max(len(wc) for wc in wrapped) * 9 + 4*mm)
         if y - row_h < FOOTER_H:
             # Rule off what stays behind, then carry the headings over. Without
@@ -621,14 +636,19 @@ def generate_caregiver_pdf(patient, plan, output_path):
     # ── STAYING SAFE AT HOME ─────────────────────────────────────────────
     safety = plan.get('safety_at_home', [])
     if safety:
-        y = need(y, 30*mm)
-        y = section_header(c, y, 'STAYING SAFE AT HOME', col('blue'), icon='◈')
-
         half = CW / 2
         item_w = half - 12*mm
         pairs = [safety[i:i+2] for i in range(0, len(safety), 2)]
+
+        def safety_row_h(pair):
+            return max(len(measure(c, s, item_w, 'Helvetica', 7.5)) for s in pair) * 9.5 + 5*mm
+
+        y = need(y, SECTION_LEAD + safety_row_h(pairs[0]) + 2*mm)
+        y = section_header(c, y, 'STAYING SAFE AT HOME', col('blue'), icon='◈')
+
         for pair in pairs:
-            wrapped = [measure(c, s, item_w, 'Helvetica', 7.5)[:3] for s in pair]
+            # No line cap — the row grows to the tallest item in the pair
+            wrapped = [measure(c, s, item_w, 'Helvetica', 7.5) for s in pair]
             row_h = max(len(wc) for wc in wrapped) * 9.5 + 5*mm
             y = need(y, row_h + 2*mm)
             fill_rect(c, ML, y-row_h, CW, row_h, col('blue_l'), radius=2*mm)
@@ -641,7 +661,8 @@ def generate_caregiver_pdf(patient, plan, output_path):
 
     # ── WHEN TO CALL US ──────────────────────────────────────────────────
     contacts = plan.get('contact_criteria', [])
-    y = need(y, 40*mm)
+    first_contact_h = (len(measure(c, contacts[0], CW - 14*mm, 'Helvetica', 7.5)) * 9.5 + 3.5*mm) if contacts else 0
+    y = need(y, SECTION_LEAD + first_contact_h)
     y = section_header(c, y, 'WHEN TO CALL US', col('navy2'), icon='◈')
 
     for s in contacts:
@@ -676,11 +697,17 @@ def generate_caregiver_pdf(patient, plan, output_path):
     consumables = supplies.get('consumables', [])
 
     if kits or consumables:
-        y = need(y, 34*mm)
+        # heading, the two-line allowance note, and the first kit row
+        first_kit_h = (6*mm + len(measure(c, kits[0].get('purpose',''), CW - 40*mm, 'Helvetica', 7)) * 8.5 + 3*mm) if kits else 0
+        y = need(y, SECTION_LEAD + 13*mm + first_kit_h)
         y = section_header(c, y, 'SUPPLIES FOR YOUR CARE', col('blue'), icon='◈')
 
-        intro = ('One of each kit is included in your package. Additional kits of '
-                 'the same type are charged separately.')
+        # The allowance is a total per session, not one of each type. The old
+        # wording described the per-type rule the pills no longer follow, which
+        # is the kind of thing a family disputes a bill against.
+        allowance = supplies.get('kit_allowance', 2)
+        intro = (f'Your package includes {allowance} kits per session. The disposable kit is '
+                 'always one of them. Additional kits are charged separately.')
         y -= draw_lines(c, measure(c, intro, CW, 'Helvetica', 7.5), ML, y, 'Helvetica', 7.5, col('grey2'), 9.5)
         y -= 4*mm
 
@@ -711,6 +738,22 @@ def generate_caregiver_pdf(patient, plan, output_path):
             c.setStrokeColor(col('line')); c.setLineWidth(0.4)
             c.line(ML, y, W-MR, y)
             y -= 3*mm
+
+        # Same running total the nurse saw on screen. Figures come from the plan
+        # JSON rather than being recomputed, so the two cannot disagree.
+        total   = supplies.get('kits_total', sum(k.get('quantity', 1) for k in kits))
+        incl    = supplies.get('kits_included', min(total, allowance))
+        extra   = supplies.get('kits_chargeable', max(0, total - allowance))
+        bar_h = 8 * mm
+        y = need(y, bar_h + 4*mm)
+        fill_rect(c, ML, y-bar_h, CW, bar_h, col('grey_l'), radius=2*mm)
+        head = f'{total} kits  ·  {incl} included  ·  '
+        text(c, head, ML+4*mm, y-bar_h+2.9*mm, 'Helvetica', 8, col('grey2'))
+        text(c, f'{extra} chargeable',
+             ML+4*mm + c.stringWidth(head, 'Helvetica', 8), y-bar_h+2.9*mm,
+             'Helvetica-Bold' if extra > 0 else 'Helvetica', 8,
+             BILL_AMBER_FG if extra > 0 else col('grey2'))
+        y -= bar_h + 4*mm
 
         if consumables:
             # Measure first so the label can never be stranded from its list
