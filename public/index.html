@@ -665,11 +665,63 @@ Generate treatment plan as JSON:`;
   }
 
   render();
+  // After the screen is up, never before — filing must not delay the plan
+  if (state.screen === 'plan') autosaveToDrive();
 }
 
 /* ─────────────────────────────────────────────────────────────────
    SCREENS
    ───────────────────────────────────────────────────────────────── */
+/* Every generated plan is filed to Drive on its own. The physio should not have
+   to remember, and a plan that exists only in a browser tab is one refresh away
+   from being lost. Fire-and-forget: the plan screen is already usable while this
+   runs, and the button repaints in place rather than re-rendering. */
+function autosaveToDrive() {
+  const p = state.plan;
+  if (!p) return;
+  const st = p._drive && p._drive.status;
+  if (st === 'saving' || st === 'saved') return;   // failed may be retried
+
+  p._drive = { status: 'saving' };
+  paintDriveBtn();
+
+  fetch('/save-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      patient: {
+        ...p._form,
+        painScore:  p._form.painScore,
+        pain_score: p._form.painScore,
+        condition:  p._form.condition
+      },
+      plan: p
+    })
+  })
+    .then(r => r.json().catch(() => ({})))
+    .then(d => {
+      if (!d || !d.success) throw new Error((d && d.error) || 'Save failed');
+      p._drive = { status: 'saved', link: d.driveLink };
+    })
+    .catch(err => { p._drive = { status: 'failed', error: err.message }; })
+    .then(paintDriveBtn);
+}
+
+function paintDriveBtn() {
+  const btn = document.getElementById('drive-btn');
+  if (!btn || !state.plan) return;
+  const d = state.plan._drive || {};
+  const set = (label, bg, cursor) => {
+    btn.textContent = label;
+    btn.style.background = bg;
+    btn.style.cursor = cursor;
+  };
+  if (d.status === 'saving')      set('Saving to Drive…', B.muted, 'default');
+  else if (d.status === 'saved')  set('✓ Saved — open', B.blue, 'pointer');
+  else if (d.status === 'failed') set('✗ Save failed — retry', B.red, 'pointer');
+  else                            set('↑ Save to Drive', B.navy, 'pointer');
+}
+
 function renderLoading() {
   const f = state.form;
 
@@ -1337,60 +1389,20 @@ function renderPlan() {
   // patient's assessment loaded, and the next plan was generated from it.
   // 'Edit & regenerate' below is the button that deliberately keeps the form.
   btn1.addEventListener('click', () => { window.location.reload(); });
-  const btn3 = h('button', {type:'button', style:{
+  // Plans now file themselves (see autosaveToDrive). This button reports that
+  // and doubles as open-link and retry, so there is no second route that would
+  // upload the same plan twice.
+  const btn3 = h('button', {type:'button', id:'drive-btn', style:{
     padding:'13px 0', borderRadius:10, border:'none',
     background:B.navy, color:'white',
     fontSize:14, fontWeight:600, cursor:'pointer',
     display:'flex', alignItems:'center', justifyContent:'center', gap:6
   }}, '↑ Save to Drive');
-  btn3.addEventListener('click', async () => {
-    btn3.textContent = 'Saving...';
-    btn3.style.opacity = '0.7';
-    btn3.style.cursor = 'default';
-    try {
-      const res = await fetch('/save-pdf', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          patient: {
-            ...state.plan._form,
-            painScore:  state.plan._form.painScore,
-            pain_score: state.plan._form.painScore,
-            condition:  state.plan._form.condition
-          },
-          plan: state.plan
-        })
-      });
-      const data = await res.json();
-      if (data.success) {
-        btn3.textContent = '✓ Saved';
-        btn3.style.background = B.blue;
-        btn3.style.opacity = '1';
-        const linkEl = h('div', s({
-          position:'fixed', bottom:90, left:'50%',
-          transform:'translateX(-50%)',
-          background:B.navy2, color:'white',
-          padding:'12px 18px', borderRadius:10,
-          fontSize:13, zIndex:999,
-          boxShadow:'0 4px 20px rgba(0,0,0,0.3)',
-          display:'flex', alignItems:'center', gap:10,
-          maxWidth:320, width:'90%'
-        }),
-          h('span', null, '✓ Saved to Drive'),
-          h('a', {href:data.driveLink, target:'_blank', style:{color:'#7DB8F7', textDecoration:'none', fontWeight:600, marginLeft:'auto'}}, 'Open →')
-        );
-        document.body.appendChild(linkEl);
-        setTimeout(() => linkEl.remove(), 6000);
-      } else {
-        throw new Error(data.error);
-      }
-    } catch (err) {
-      btn3.textContent = '✗ Failed';
-      btn3.style.background = B.red;
-      btn3.style.opacity = '1';
-      btn3.style.cursor = 'pointer';
-      setTimeout(() => { btn3.textContent = '↑ Save to Drive'; btn3.style.background = B.navy; }, 3000);
-    }
+  btn3.addEventListener('click', () => {
+    const d = state.plan._drive || {};
+    if (d.status === 'saving') return;
+    if (d.status === 'saved' && d.link) { window.open(d.link, '_blank'); return; }
+    autosaveToDrive();
   });
   const btn2 = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:'none', background:B.blue, color:'white', fontSize:14, fontWeight:600, cursor:'pointer'}}, 'Edit & regenerate');
   btn2.addEventListener('click', () => { state.screen = 'form'; state.step = 0; render(); });
@@ -1577,6 +1589,8 @@ function render() {
   else if (state.screen === 'plan' && state.plan) screen = renderPlan();
   else screen = renderForm();
   app.appendChild(screen);
+  // The button is rebuilt on every render, so restore whatever the save is doing
+  if (state.screen === 'plan' && state.plan) paintDriveBtn();
   window.scrollTo(0, 0);
 }
 

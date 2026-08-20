@@ -1421,6 +1421,60 @@ Write the care plan as JSON:`;
   }
 
   render();
+  // After the screen is up, never before — filing must not delay the plan
+  if (state.screen === 'plan') autosaveToDrive();
+}
+
+/* Every generated plan is filed to Drive on its own. A nurse should not have to
+   remember, and a plan that exists only in a browser tab is one refresh away
+   from being lost. Fire-and-forget: the plan screen is already usable while this
+   runs, and the button below repaints in place rather than re-rendering. */
+function autosaveToDrive() {
+  const p = state.plan;
+  if (!p) return;
+  const st = p._drive && p._drive.status;
+  if (st === 'saving' || st === 'saved') return;   // failed may be retried
+
+  const f = p._form || {};
+  p._drive = { status: 'saving' };
+  paintDriveBtn();
+
+  fetch('/save-caregiver-pdf', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      patient: {
+        name: f.name, age: f.age, gender: f.gender, zone: f.zone,
+        care_type: f.careType, service_tier: f.serviceTier,
+        start_date: f.startDate, assessed_by: f.assessedBy,
+        emergency_name: f.emergencyName, emergency_phone: f.emergencyPhone,
+        doctor_name: f.doctorName, doctor_phone: f.doctorPhone
+      },
+      plan: p
+    })
+  })
+    .then(r => r.json().catch(() => ({})))
+    .then(d => {
+      if (!d || !d.success) throw new Error((d && d.error) || 'Save failed');
+      p._drive = { status: 'saved', link: d.driveLink };
+    })
+    .catch(err => { p._drive = { status: 'failed', error: err.message }; })
+    .then(paintDriveBtn);
+}
+
+function paintDriveBtn() {
+  const btn = document.getElementById('drive-btn');
+  if (!btn || !state.plan) return;
+  const d = state.plan._drive || {};
+  const set = (label, bg, cursor) => {
+    btn.textContent = label;
+    btn.style.background = bg;
+    btn.style.cursor = cursor;
+  };
+  if (d.status === 'saving')      set('Saving to Drive…', B.muted, 'default');
+  else if (d.status === 'saved')  set('✓ Saved to Drive — open', B.blue, 'pointer');
+  else if (d.status === 'failed') set('✗ Save failed — retry', B.red, 'pointer');
+  else                            set('↑ Save to Drive', B.navy, 'pointer');
 }
 
 function renderLoading() {
@@ -1747,6 +1801,21 @@ function renderPlan() {
   });
   acts.appendChild(btnPdf);
 
+  // One control for the whole Drive lifecycle — status, open, and retry — so
+  // there is no second way to upload and no chance of filing the plan twice
+  const btnDrive = h('button', {type:'button', id:'drive-btn', style:{
+    width:'100%', padding:'13px 0', borderRadius:10, border:'none',
+    background:B.navy, color:'white', fontSize:14, fontWeight:600,
+    cursor:'pointer', marginBottom:10
+  }}, '↑ Save to Drive');
+  btnDrive.addEventListener('click', () => {
+    const d = state.plan._drive || {};
+    if (d.status === 'saving') return;
+    if (d.status === 'saved' && d.link) { window.open(d.link, '_blank'); return; }
+    autosaveToDrive();
+  });
+  acts.appendChild(btnDrive);
+
   const row = h('div', s({display:'grid', gridTemplateColumns:'1fr 1fr', gap:10}));
   const btnNew = h('button', {type:'button', style:{padding:'13px 0', borderRadius:10, border:`1px solid ${B.border}`, background:'white', color:B.navy, fontSize:14, fontWeight:500, cursor:'pointer'}}, 'New assessment');
   btnNew.addEventListener('click', () => { window.location.reload(); });
@@ -1771,6 +1840,8 @@ function render() {
   else if (state.screen === 'plan' && state.plan) screen = renderPlan();
   else screen = renderForm();
   app.appendChild(screen);
+  // The button is rebuilt on every render, so restore whatever the save is doing
+  if (state.screen === 'plan' && state.plan) paintDriveBtn();
   window.scrollTo(0, 0);
 }
 
